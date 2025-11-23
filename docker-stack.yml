@@ -30,9 +30,9 @@ services:
     environment:
       - TZ=${TZ:-America/Sao_Paulo}
       - DOCKER_API_VERSION=1.43
-      - CF_API_EMAIL=${CF_API_EMAIL}
-      - CF_API_KEY=${CF_API_KEY}
-      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+      - CLOUDFLARE_EMAIL=${CF_API_EMAIL}
+      - CLOUDFLARE_API_KEY=${CF_API_KEY}
+      - CLOUDFLARE_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
