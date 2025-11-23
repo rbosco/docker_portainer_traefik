@@ -49,18 +49,86 @@ nano .env
 
 ```
 .
-├── docker-compose.yml          # Definição dos serviços
+├── docker-compose.yml          # Docker Compose (single node)
+├── docker-stack.yml            # Docker Swarm Stack (cluster)
+├── setup.sh                    # Script de instalação automática (Compose)
+├── swarm-init.sh              # Script de inicialização do Swarm
+├── swarm-deploy.sh            # Script de deploy da Stack
 ├── .env                        # Variáveis de ambiente (não versionado)
 ├── .env.example               # Exemplo de variáveis de ambiente
+├── .gitignore                 # Arquivos ignorados pelo Git
+├── README.md                  # Documentação principal
+├── README-SWARM.md            # Documentação Docker Swarm
 ├── traefik/
-│   ├── traefik.yml           # Configuração estática do Traefik
+│   ├── traefik.yml           # Configuração Traefik (Compose)
+│   ├── traefik-swarm.yml     # Configuração Traefik (Swarm)
 │   └── dynamic/
 │       └── tls.yml           # Configuração TLS dinâmica
-└── data/
+└── data/                      # Dados persistentes (não versionado)
     ├── traefik/
     │   └── acme.json         # Certificados Let's Encrypt
     └── portainer/            # Dados do Portainer
 ```
+
+## 🎯 Modos de Instalação
+
+Este projeto suporta **dois modos de instalação**:
+
+### 📦 Docker Compose (Recomendado para iniciantes)
+
+**Quando usar:**
+- ✅ Servidor único
+- ✅ Desenvolvimento e testes
+- ✅ Projetos pequenos/médios
+- ✅ Budget limitado
+- ✅ Simplicidade
+
+**Arquivos:**
+- `docker-compose.yml`
+- `setup.sh`
+
+**Comandos:**
+```bash
+./setup.sh                    # Instalação automática
+# ou
+docker compose up -d          # Manual
+```
+
+### 🐝 Docker Swarm (Recomendado para produção)
+
+**Quando usar:**
+- ✅ Múltiplos servidores (cluster)
+- ✅ Alta disponibilidade necessária
+- ✅ Produção enterprise
+- ✅ Escalabilidade automática
+- ✅ Zero downtime crítico
+
+**Arquivos:**
+- `docker-stack.yml`
+- `swarm-init.sh`
+- `swarm-deploy.sh`
+
+**Comandos:**
+```bash
+./swarm-init.sh              # Inicializar cluster
+./swarm-deploy.sh            # Deploy da stack
+```
+
+**URLs:**
+- Docker Compose: `traefik.localhost` / `portainer.localhost`
+- Docker Swarm: `pr.seudominio.com` / `painel.seudominio.com`
+
+### 📊 Comparação Rápida
+
+| Característica | Compose | Swarm |
+|----------------|---------|-------|
+| Servidores | 1 | 1+ (cluster) |
+| Alta Disponibilidade | ❌ | ✅ |
+| Load Balancing | ❌ | ✅ Automático |
+| Escalabilidade | Manual | Automática |
+| Complexidade | 🟢 Simples | 🟡 Média |
+| Custo | 💰 Baixo | 💰💰 Médio |
+| Ideal para | Dev/Small | Produção |
 
 ## 🚀 Início Rápido
 
@@ -137,7 +205,9 @@ docker-compose logs -f
 
 ## 🔐 Acesso aos Serviços
 
-### Desenvolvimento Local (sem domínio)
+### Docker Compose
+
+**Desenvolvimento Local (sem domínio):**
 
 - **Traefik Dashboard**: http://localhost:8080
   - Usuário padrão: `admin`
@@ -146,10 +216,29 @@ docker-compose logs -f
 - **Portainer**: http://localhost:9000
   - Configure o usuário admin no primeiro acesso
 
-### Produção (com domínio configurado)
+**Produção (com domínio configurado):**
 
 - **Traefik Dashboard**: https://traefik.seudominio.com
 - **Portainer**: https://portainer.seudominio.com
+
+### Docker Swarm
+
+**URLs Customizadas (produção):**
+
+- **Traefik Dashboard**: https://pr.seudominio.com
+  - Autenticação configurada via `TRAEFIK_USER`
+  - Monitoramento e métricas em tempo real
+
+- **Portainer**: https://painel.seudominio.com
+  - Gerenciamento completo do cluster
+  - Visualização de todos os nodes
+  - Deploy e escalabilidade via interface
+
+**Importante:** Configure os registros DNS:
+```
+A    pr       SEU_IP_SERVIDOR
+A    painel   SEU_IP_SERVIDOR
+```
 
 ## ⚙️ Configuração
 
@@ -214,30 +303,183 @@ networks:
     external: true
 ```
 
+## 🔄 Migração: Compose → Swarm
+
+Já está usando Docker Compose e quer migrar para Swarm? Siga este guia:
+
+### Passo 1: Backup dos Dados
+
+```bash
+# Fazer backup dos volumes do Portainer
+docker run --rm \
+  -v docker_portainer_traefik_portainer-data:/data \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/portainer-backup.tar.gz /data
+
+# Backup dos certificados (se existirem)
+cp -r data/traefik data/traefik.backup
+```
+
+### Passo 2: Parar Serviços Compose
+
+```bash
+docker compose down
+```
+
+### Passo 3: Atualizar .env
+
+Adicione as variáveis necessárias para Swarm:
+
+```bash
+# Adicione ao .env
+ACME_EMAIL=seu-email@example.com
+STACK_NAME=traefik
+```
+
+### Passo 4: Inicializar Swarm
+
+```bash
+./swarm-init.sh
+```
+
+Escolha a opção **1** (Manager - primeiro node)
+
+### Passo 5: Restaurar Dados (Opcional)
+
+```bash
+# Se tiver backup do Portainer, restaure:
+docker run --rm \
+  -v traefik_portainer-data:/data \
+  -v $(pwd):/backup \
+  alpine sh -c "cd / && tar xzf /backup/portainer-backup.tar.gz"
+```
+
+### Passo 6: Deploy no Swarm
+
+```bash
+./swarm-deploy.sh
+```
+
+Escolha a opção **1** (Deploy/Atualizar stack)
+
+### Passo 7: Atualizar DNS
+
+Atualize seus registros DNS para os novos subdomínios:
+
+**Antes (Compose):**
+```
+traefik.seudominio.com   → SEU_IP
+portainer.seudominio.com → SEU_IP
+```
+
+**Depois (Swarm):**
+```
+pr.seudominio.com     → SEU_IP
+painel.seudominio.com → SEU_IP
+```
+
+### Diferenças Importantes
+
+| Aspecto | Compose | Swarm |
+|---------|---------|-------|
+| Comando de deploy | `docker compose up -d` | `docker stack deploy` |
+| Ver serviços | `docker compose ps` | `docker stack services traefik` |
+| Ver logs | `docker compose logs -f` | `docker service logs -f traefik_traefik` |
+| Escalar | Editar compose + redeploy | `docker service scale traefik_app=3` |
+| Rede | bridge | overlay |
+| Volumes | bind mounts funcionam | Preferir volumes nomeados |
+
+### Verificação Pós-Migração
+
+```bash
+# Verificar nodes do cluster
+docker node ls
+
+# Verificar serviços
+docker stack services traefik
+
+# Verificar logs
+docker service logs -f traefik_traefik
+docker service logs -f traefik_portainer
+
+# Acessar dashboard
+curl -I https://pr.seudominio.com
+curl -I https://painel.seudominio.com
+```
+
 ## 🔧 Comandos Úteis
 
-### Gerenciamento de Containers
+### Docker Compose
 
 ```bash
 # Iniciar serviços
-docker-compose up -d
+docker compose up -d
 
 # Parar serviços
-docker-compose down
+docker compose down
 
 # Reiniciar serviços
-docker-compose restart
+docker compose restart
+
+# Ver status
+docker compose ps
 
 # Ver logs
-docker-compose logs -f
+docker compose logs -f
 
 # Ver logs de um serviço específico
-docker-compose logs -f traefik
-docker-compose logs -f portainer
+docker compose logs -f traefik
+docker compose logs -f portainer
 
 # Atualizar imagens
-docker-compose pull
-docker-compose up -d
+docker compose pull
+docker compose up -d
+
+# Validar configuração
+docker compose config
+```
+
+### Docker Swarm
+
+```bash
+# Deploy da stack
+./swarm-deploy.sh
+# ou
+docker stack deploy -c docker-stack.yml traefik
+
+# Ver serviços
+docker stack services traefik
+
+# Ver containers (tasks)
+docker stack ps traefik
+
+# Ver logs
+docker service logs -f traefik_traefik
+docker service logs -f traefik_portainer
+
+# Escalar serviço
+docker service scale traefik_portainer=3
+
+# Atualizar serviço
+docker service update --image traefik:2.11.4 traefik_traefik
+
+# Rollback de atualização
+docker service rollback traefik_traefik
+
+# Remover stack
+docker stack rm traefik
+
+# Ver nodes do cluster
+docker node ls
+
+# Inspecionar node
+docker node inspect <node-id>
+
+# Drenar node (mover containers)
+docker node update --availability drain <node-id>
+
+# Reativar node
+docker node update --availability active <node-id>
 ```
 
 ### Manutenção
@@ -246,11 +488,23 @@ docker-compose up -d
 # Limpar containers não utilizados
 docker system prune -a
 
-# Backup dos dados do Portainer
+# Backup dos dados do Portainer (Compose)
 tar -czf portainer-backup-$(date +%Y%m%d).tar.gz data/portainer/
 
-# Verificar rede proxy
+# Backup dos dados do Portainer (Swarm)
+docker run --rm \
+  -v traefik_portainer-data:/data \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/portainer-backup-$(date +%Y%m%d).tar.gz /data
+
+# Verificar rede
 docker network inspect proxy
+
+# Ver uso de recursos
+docker stats
+
+# Ver eventos em tempo real
+docker events --filter type=service
 ```
 
 ## 🛡️ Segurança
