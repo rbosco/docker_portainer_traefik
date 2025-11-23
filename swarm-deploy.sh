@@ -77,8 +77,12 @@ fi
 
 print_success "Arquivo .env encontrado"
 
-# Carregar variáveis
+# Carregar variáveis do .env
+print_info "Carregando variáveis de ambiente do .env..."
+set -a
 source .env
+set +a
+print_success "Variáveis de ambiente carregadas"
 
 # Verificar variáveis obrigatórias
 REQUIRED_VARS=("DOMAIN" "TRAEFIK_USER")
