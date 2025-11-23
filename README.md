@@ -244,6 +244,44 @@ A    *        SEU_IP_SERVIDOR
 
 ## ⚙️ Configuração
 
+### Personalizar Subdomínios
+
+Você pode customizar os subdomínios dos serviços editando o arquivo `.env`:
+
+```bash
+# Subdomínios padrão
+SUBDOMAIN_TRAEFIK=pr
+SUBDOMAIN_PORTAINER=painel
+```
+
+**Exemplos de customização:**
+
+```bash
+# Usar subdomínios tradicionais
+SUBDOMAIN_TRAEFIK=traefik
+SUBDOMAIN_PORTAINER=portainer
+
+# Usar nomes personalizados
+SUBDOMAIN_TRAEFIK=dashboard
+SUBDOMAIN_PORTAINER=admin
+
+# Usar nomes curtos
+SUBDOMAIN_TRAEFIK=t
+SUBDOMAIN_PORTAINER=p
+```
+
+Após alterar, reinicie os serviços:
+
+```bash
+# Docker Compose
+docker compose down && docker compose up -d
+
+# Docker Swarm
+./swarm-deploy.sh
+```
+
+**Importante:** Atualize seus registros DNS para os novos subdomínios!
+
 ### Traefik Dashboard - Alterar Senha
 
 Para gerar um novo hash de senha para o Traefik:

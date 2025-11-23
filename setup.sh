@@ -158,6 +158,17 @@ collect_information() {
     print_info "Gerando hash da senha..."
     TRAEFIK_USER=$(generate_password_hash "$TRAEFIK_USERNAME" "$TRAEFIK_PASSWORD")
 
+    # Subdomínios
+    echo
+    print_info "Configure os subdomínios para acesso aos serviços"
+    echo -e "${YELLOW}Exemplos: pr, traefik, dashboard${NC}"
+    read -p "Subdomínio do Traefik [pr]: " SUBDOMAIN_TRAEFIK
+    SUBDOMAIN_TRAEFIK=${SUBDOMAIN_TRAEFIK:-pr}
+
+    echo -e "${YELLOW}Exemplos: painel, portainer, admin${NC}"
+    read -p "Subdomínio do Portainer [painel]: " SUBDOMAIN_PORTAINER
+    SUBDOMAIN_PORTAINER=${SUBDOMAIN_PORTAINER:-painel}
+
     # Cloudflare (apenas para produção)
     if [ "$INSTALL_MODE" = "2" ]; then
         echo
@@ -188,6 +199,10 @@ create_env_file() {
     cat > .env << EOF
 # Domain configuration
 DOMAIN=$DOMAIN
+
+# Subdomains configuration
+SUBDOMAIN_TRAEFIK=$SUBDOMAIN_TRAEFIK
+SUBDOMAIN_PORTAINER=$SUBDOMAIN_PORTAINER
 
 # Timezone
 TZ=$TZ
@@ -339,26 +354,28 @@ show_access_info() {
 
     if [ "$INSTALL_MODE" = "1" ]; then
         echo -e "${BLUE}Traefik Dashboard:${NC}"
-        echo -e "  URL: ${YELLOW}http://localhost:8080${NC}"
+        echo -e "  Via proxy: ${YELLOW}http://$SUBDOMAIN_TRAEFIK.$DOMAIN${NC}"
+        echo -e "  Direto:    ${YELLOW}http://localhost:8080${NC}"
         echo -e "  Usuário: ${YELLOW}$TRAEFIK_USERNAME${NC}"
         echo -e "  Senha: ${YELLOW}$TRAEFIK_PASSWORD${NC}"
         echo
         echo -e "${BLUE}Portainer:${NC}"
-        echo -e "  URL: ${YELLOW}http://localhost:9000${NC}"
+        echo -e "  Via proxy: ${YELLOW}http://$SUBDOMAIN_PORTAINER.$DOMAIN${NC}"
+        echo -e "  Direto:    ${YELLOW}http://localhost:9000${NC}"
         echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
     else
         echo -e "${BLUE}Traefik Dashboard:${NC}"
-        echo -e "  URL: ${YELLOW}https://traefik.$DOMAIN${NC}"
+        echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_TRAEFIK.$DOMAIN${NC}"
         echo -e "  Usuário: ${YELLOW}$TRAEFIK_USERNAME${NC}"
         echo -e "  Senha: ${YELLOW}$TRAEFIK_PASSWORD${NC}"
         echo
         echo -e "${BLUE}Portainer:${NC}"
-        echo -e "  URL: ${YELLOW}https://portainer.$DOMAIN${NC}"
+        echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_PORTAINER.$DOMAIN${NC}"
         echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
         echo
         print_warning "Certifique-se de que os registros DNS estão configurados:"
-        echo -e "  ${YELLOW}traefik.$DOMAIN${NC} → IP do servidor"
-        echo -e "  ${YELLOW}portainer.$DOMAIN${NC} → IP do servidor"
+        echo -e "  ${YELLOW}$SUBDOMAIN_TRAEFIK.$DOMAIN${NC} → IP do servidor"
+        echo -e "  ${YELLOW}$SUBDOMAIN_PORTAINER.$DOMAIN${NC} → IP do servidor"
     fi
 
     echo
