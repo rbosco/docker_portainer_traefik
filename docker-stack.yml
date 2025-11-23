@@ -1,6 +1,6 @@
 services:
   traefik:
-    image: traefik:2.11.3
+    image: traefik:3.2
     command:
       - --api.dashboard=true
       - --providers.docker.swarmMode=true
