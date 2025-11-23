@@ -110,6 +110,7 @@ echo "1) Deploy/Atualizar stack"
 echo "2) Remover stack"
 echo "3) Ver status da stack"
 echo "4) Ver logs"
+echo "5) Limpeza completa (stack + volumes + rede)"
 echo
 read -p "Opção [1]: " DEPLOY_OPTION
 DEPLOY_OPTION=${DEPLOY_OPTION:-1}
@@ -240,6 +241,51 @@ case $DEPLOY_OPTION in
         print_info "Exibindo logs do serviço: ${STACK_NAME}_${SERVICE}"
         echo
         docker service logs -f "${STACK_NAME}_${SERVICE}"
+        ;;
+
+    5)
+        # Limpeza completa
+        print_header "Limpeza Completa"
+
+        echo -e "${RED}ATENÇÃO: Esta opção irá:${NC}"
+        echo "  - Remover a stack '$STACK_NAME'"
+        echo "  - Remover todos os volumes (dados persistentes)"
+        echo "  - Remover a rede 'proxy'"
+        echo "  ${RED}TODOS OS DADOS SERÃO PERDIDOS!${NC}"
+        echo
+
+        read -p "Tem ABSOLUTA CERTEZA que deseja continuar? Digite 'LIMPAR' para confirmar: " CONFIRM
+
+        if [ "$CONFIRM" = "LIMPAR" ]; then
+            # Remover stack
+            if docker stack ls | grep -q "$STACK_NAME"; then
+                print_info "Removendo stack '$STACK_NAME'..."
+                docker stack rm "$STACK_NAME"
+                print_success "Stack removida"
+
+                print_info "Aguardando limpeza dos containers..."
+                sleep 15
+            else
+                print_warning "Stack '$STACK_NAME' não encontrada"
+            fi
+
+            # Remover volumes
+            print_info "Removendo volumes..."
+            docker volume rm traefik-certificates 2>/dev/null && print_success "Volume traefik-certificates removido" || print_warning "Volume traefik-certificates não encontrado"
+            docker volume rm traefik-data 2>/dev/null && print_success "Volume traefik-data removido" || print_warning "Volume traefik-data não encontrado"
+            docker volume rm portainer-data 2>/dev/null && print_success "Volume portainer-data removido" || print_warning "Volume portainer-data não encontrado"
+
+            # Remover rede
+            print_info "Removendo rede 'proxy'..."
+            docker network rm proxy 2>/dev/null && print_success "Rede 'proxy' removida" || print_warning "Rede 'proxy' não encontrada"
+
+            echo
+            print_success "Limpeza completa finalizada!"
+            echo
+            print_info "Para reinstalar, execute novamente este script com a opção 1"
+        else
+            print_info "Limpeza cancelada"
+        fi
         ;;
 
     *)

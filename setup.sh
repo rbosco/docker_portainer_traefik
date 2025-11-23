@@ -113,6 +113,32 @@ generate_password_hash() {
     fi
 }
 
+# Função de limpeza
+cleanup_existing() {
+    print_header "Limpeza de Containers Existentes"
+
+    echo -e "${YELLOW}Esta opção irá:${NC}"
+    echo "  - Parar e remover todos os containers do projeto"
+    echo "  - Remover a rede proxy"
+    echo "  - Remover volumes (dados persistentes)"
+    echo
+    read -p "Deseja remover todos os containers e dados do projeto? [s/N]: " CLEANUP
+
+    if [[ "$CLEANUP" =~ ^[Ss]$ ]]; then
+        print_info "Parando e removendo containers..."
+        docker-compose down -v 2>/dev/null || true
+
+        print_info "Removendo rede proxy..."
+        docker network rm proxy 2>/dev/null || true
+
+        print_success "Limpeza concluída!"
+        echo
+    else
+        print_info "Limpeza cancelada"
+        echo
+    fi
+}
+
 # Coletar informações do usuário
 collect_information() {
     print_header "Configuração Inicial"
@@ -404,6 +430,7 @@ EOF
 
     check_root
     check_prerequisites
+    cleanup_existing
     collect_information
     create_env_file
     prepare_directories
