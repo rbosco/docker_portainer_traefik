@@ -269,11 +269,16 @@ case $DEPLOY_OPTION in
                 print_warning "Stack '$STACK_NAME' não encontrada"
             fi
 
-            # Remover volumes
-            print_info "Removendo volumes..."
-            docker volume rm traefik-certificates 2>/dev/null && print_success "Volume traefik-certificates removido" || print_warning "Volume traefik-certificates não encontrado"
-            docker volume rm traefik-data 2>/dev/null && print_success "Volume traefik-data removido" || print_warning "Volume traefik-data não encontrado"
-            docker volume rm portainer-data 2>/dev/null && print_success "Volume portainer-data removido" || print_warning "Volume portainer-data não encontrado"
+            # Remover volumes antigos (se existirem)
+            print_info "Removendo volumes antigos (se existirem)..."
+            # Nota: Agora usamos bind mounts (./data), mas removemos volumes antigos caso existam
+            docker volume rm traefik_traefik-certificates 2>/dev/null || true
+            docker volume rm traefik_traefik-data 2>/dev/null || true
+            docker volume rm traefik_portainer-data 2>/dev/null || true
+            docker volume rm traefik-certificates 2>/dev/null || true
+            docker volume rm traefik-data 2>/dev/null || true
+            docker volume rm portainer-data 2>/dev/null || true
+            print_success "Volumes antigos limpos (se existiam)"
 
             # Remover rede
             print_info "Removendo rede 'proxy'..."
