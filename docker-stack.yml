@@ -3,9 +3,9 @@ services:
     image: traefik:3.2
     command:
       - --api.dashboard=true
-      - --providers.docker.swarmMode=true
-      - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=proxy
+      - --providers.swarm.endpoint=unix:///var/run/docker.sock
+      - --providers.swarm.exposedbydefault=false
+      - --providers.swarm.network=proxy
       - --providers.file.directory=/dynamic
       - --providers.file.watch=true
       - --entrypoints.http.address=:80
