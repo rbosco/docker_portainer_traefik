@@ -40,7 +40,7 @@ echo -e "${BLUE}"
 cat << "EOF"
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║   Docker Swarm - Traefik 2.11.3 + Portainer              ║
+║   Docker Swarm - Traefik 2.10.7 + Portainer              ║
 ║   Script de Inicialização                                ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
@@ -133,6 +133,43 @@ EOL
         print_success "Rede 'proxy' criada"
     fi
 
+    # Preparar estrutura de arquivos e diretórios
+    print_header "Preparando Estrutura de Dados"
+
+    # Copiar .env.example se .env não existir
+    if [ ! -f .env ]; then
+        if [ -f .env.example ]; then
+            print_info "Criando arquivo .env a partir de .env.example..."
+            cp .env.example .env
+            print_success "Arquivo .env criado"
+            print_warning "IMPORTANTE: Edite o arquivo .env e configure suas variáveis!"
+            echo
+        else
+            print_warning "Arquivo .env.example não encontrado"
+            print_info "Você precisará criar o arquivo .env manualmente"
+        fi
+    else
+        print_success "Arquivo .env já existe"
+    fi
+
+    # Criar estrutura de diretórios
+    print_info "Criando diretórios de dados..."
+    mkdir -p data/traefik data/portainer
+    print_success "Diretórios criados: data/traefik, data/portainer"
+
+    # Criar acme.json com permissões corretas
+    if [ ! -f data/traefik/acme.json ]; then
+        print_info "Criando arquivo acme.json..."
+        touch data/traefik/acme.json
+        chmod 600 data/traefik/acme.json
+        print_success "Arquivo acme.json criado com permissões 600"
+    else
+        print_info "Arquivo acme.json já existe"
+        # Garantir permissões corretas
+        chmod 600 data/traefik/acme.json
+        print_success "Permissões do acme.json verificadas (600)"
+    fi
+
     # Labels no node
     print_header "Configurando Labels do Node"
 
@@ -170,6 +207,12 @@ echo
 print_success "Inicialização do Swarm concluída!"
 echo
 print_info "Próximos passos:"
-echo "  1. Configure o arquivo .env"
-echo "  2. Execute: ./swarm-deploy.sh"
+echo "  1. ${YELLOW}Edite o arquivo .env${NC} e configure:"
+echo "     - DOMAIN (seu domínio)"
+echo "     - SUBDOMAIN_TRAEFIK e SUBDOMAIN_PORTAINER (subdomínios)"
+echo "     - ACME_EMAIL (email para Let's Encrypt)"
+echo "     - CF_API_EMAIL e CF_API_KEY (credenciais Cloudflare)"
+echo "     - TRAEFIK_USER (senha do dashboard)"
+echo
+echo "  2. Execute: ${GREEN}./swarm-deploy.sh${NC}"
 echo
