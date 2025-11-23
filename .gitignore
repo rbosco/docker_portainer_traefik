@@ -1,0 +1,25 @@
+# Environment variables
+.env
+
+# Data directories
+data/
+
+# Traefik certificates
+acme.json
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+tmp/
+temp/
