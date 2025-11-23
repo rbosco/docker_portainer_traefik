@@ -1,10 +1,29 @@
-# Docker Stack: Traefik 2.11.3 + Portainer
+# Docker Stack: Traefik 2.10.7 + Portainer
 
 Estrutura completa para gerenciamento de containers Docker usando Traefik como reverse proxy e Portainer como interface de gerenciamento.
 
+## ⚠️ Requisitos Importantes
+
+### Docker 24.0.7 (API 1.43)
+
+Este projeto requer **Docker 24.0.7** para funcionar corretamente com o Traefik 2.10.7.
+
+**Versões incompatíveis:**
+- ❌ Docker 29.x (API 1.52) - Incompatível
+- ❌ Docker 28.x (API 1.45+) - Problemas de compatibilidade
+- ✅ **Docker 24.0.7 (API 1.43)** - Testado e funcionando
+
+**📖 [Guia completo de instalação do Docker 24.0.7 →](INSTALL-DOCKER.md)**
+
+Se você já tem Docker instalado, verifique a versão:
+```bash
+docker version --format '{{.Server.Version}}'
+# Deve mostrar: 24.0.7
+```
+
 ## 📋 Componentes
 
-- **Traefik 2.11.3**: Reverse proxy moderno com suporte a Let's Encrypt
+- **Traefik 2.10.7**: Reverse proxy moderno com suporte a Let's Encrypt (compatível com Docker 24.0.7)
 - **Portainer CE**: Interface web para gerenciamento de containers Docker
 - **Docker Compose**: Orquestração dos serviços
 - **Docker Swarm** (opcional): Suporte completo para clusters e alta disponibilidade
