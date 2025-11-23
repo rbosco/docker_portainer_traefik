@@ -33,7 +33,34 @@ Estrutura completa para gerenciamento de containers Docker usando Traefik como r
 - Docker Compose 2.0+
 - Porta 80, 443 e 8080 disponíveis
 
-### Instalação
+### Instalação Automática (Recomendado)
+
+O script `setup.sh` configura tudo automaticamente de forma interativa:
+
+1. **Clone o repositório:**
+```bash
+git clone <repository-url>
+cd docker_portainer_traefik
+```
+
+2. **Execute o script de instalação:**
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+O script irá:
+- ✅ Verificar todos os pré-requisitos (Docker, Docker Compose, portas)
+- ✅ Coletar informações de configuração (domínio, credenciais, etc.)
+- ✅ Escolher entre modo Desenvolvimento ou Produção
+- ✅ Gerar automaticamente o arquivo `.env`
+- ✅ Configurar permissões e estrutura de diretórios
+- ✅ Iniciar todos os serviços
+- ✅ Exibir informações de acesso
+
+### Instalação Manual
+
+Se preferir configurar manualmente:
 
 1. **Clone o repositório:**
 ```bash
@@ -53,12 +80,19 @@ Edite as seguintes variáveis no arquivo `.env`:
 - `TRAEFIK_USER`: Credenciais para o dashboard do Traefik
 - `CF_API_EMAIL` e `CF_API_KEY`: Credenciais Cloudflare (se usar Let's Encrypt)
 
-3. **Inicie os serviços:**
+3. **Prepare os arquivos necessários:**
+```bash
+mkdir -p data/traefik data/portainer
+touch data/traefik/acme.json
+chmod 600 data/traefik/acme.json
+```
+
+4. **Inicie os serviços:**
 ```bash
 docker-compose up -d
 ```
 
-4. **Verifique o status:**
+5. **Verifique o status:**
 ```bash
 docker-compose ps
 docker-compose logs -f
