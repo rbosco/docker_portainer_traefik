@@ -115,8 +115,9 @@ docker compose up -d          # Manual
 ```
 
 **URLs:**
-- Docker Compose: `traefik.localhost` / `portainer.localhost`
-- Docker Swarm: `pr.seudominio.com` / `painel.seudominio.com`
+- Traefik Dashboard: `pr.seudominio.com` (ou `pr.localhost` em dev)
+- Portainer: `painel.seudominio.com` (ou `painel.localhost` em dev)
+- **Nota:** URLs unificadas para ambos os modos!
 
 ### 📊 Comparação Rápida
 
@@ -205,39 +206,40 @@ docker-compose logs -f
 
 ## 🔐 Acesso aos Serviços
 
-### Docker Compose
+### URLs Unificadas (Compose e Swarm)
 
 **Desenvolvimento Local (sem domínio):**
 
-- **Traefik Dashboard**: http://localhost:8080
-  - Usuário padrão: `admin`
-  - Senha padrão: `admin`
+- **Traefik Dashboard**:
+  - Via proxy: http://pr.localhost
+  - Direto: http://localhost:8080
+  - Usuário padrão: `admin` / Senha: `admin`
 
-- **Portainer**: http://localhost:9000
+- **Portainer**:
+  - Via proxy: http://painel.localhost
+  - Direto: http://localhost:9000
   - Configure o usuário admin no primeiro acesso
 
 **Produção (com domínio configurado):**
 
-- **Traefik Dashboard**: https://traefik.seudominio.com
-- **Portainer**: https://portainer.seudominio.com
-
-### Docker Swarm
-
-**URLs Customizadas (produção):**
-
 - **Traefik Dashboard**: https://pr.seudominio.com
   - Autenticação configurada via `TRAEFIK_USER`
   - Monitoramento e métricas em tempo real
+  - Dashboard interativo do Traefik
 
 - **Portainer**: https://painel.seudominio.com
-  - Gerenciamento completo do cluster
-  - Visualização de todos os nodes
-  - Deploy e escalabilidade via interface
+  - Gerenciamento de containers/cluster
+  - Deploy via interface web
+  - Visualização de logs e métricas
+  - **Swarm:** Gerenciamento completo de nodes
 
-**Importante:** Configure os registros DNS:
+**Configuração DNS necessária:**
 ```
 A    pr       SEU_IP_SERVIDOR
 A    painel   SEU_IP_SERVIDOR
+
+# Ou com wildcard:
+A    *        SEU_IP_SERVIDOR
 ```
 
 ## ⚙️ Configuração
@@ -362,21 +364,16 @@ docker run --rm \
 
 Escolha a opção **1** (Deploy/Atualizar stack)
 
-### Passo 7: Atualizar DNS
+### Passo 7: Verificar DNS
 
-Atualize seus registros DNS para os novos subdomínios:
+Os subdomínios já estão unificados! Certifique-se de que seus registros DNS estão configurados:
 
-**Antes (Compose):**
 ```
-traefik.seudominio.com   → SEU_IP
-portainer.seudominio.com → SEU_IP
+A    pr       SEU_IP_SERVIDOR
+A    painel   SEU_IP_SERVIDOR
 ```
 
-**Depois (Swarm):**
-```
-pr.seudominio.com     → SEU_IP
-painel.seudominio.com → SEU_IP
-```
+**Nota:** As URLs são as mesmas para Compose e Swarm desde a última atualização.
 
 ### Diferenças Importantes
 
