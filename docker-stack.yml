@@ -1,6 +1,6 @@
 services:
   traefik:
-    image: traefik:2.10
+    image: traefik:2.10.7
     command:
       - --api.dashboard=true
       - --providers.docker.swarmMode=true
@@ -29,7 +29,6 @@ services:
         mode: host
     environment:
       - TZ=${TZ:-America/Sao_Paulo}
-      - DOCKER_API_VERSION=1.44
       - CF_API_EMAIL=${CF_API_EMAIL}
       - CF_API_KEY=${CF_API_KEY}
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
