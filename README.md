@@ -248,6 +248,40 @@ sudo lsof -i :443
 sudo systemctl stop apache2  # ou nginx
 ```
 
+### Erro de rede "network proxy has incorrect label"
+
+Se você receber o erro:
+```
+WARN network proxy was found but has incorrect label com.docker.compose.network
+```
+
+**Solução:**
+```bash
+# Parar todos os containers
+docker compose down
+
+# Remover a rede antiga (se não estiver em uso)
+docker network rm proxy
+
+# Recriar tudo
+docker compose up -d
+```
+
+Se a rede estiver em uso por outros containers:
+```bash
+# Verificar quais containers estão usando a rede
+docker network inspect proxy
+
+# Parar os containers que estão usando
+docker stop <container-id>
+
+# Remover a rede
+docker network rm proxy
+
+# Iniciar novamente
+docker compose up -d
+```
+
 ### Certificados Let's Encrypt não são gerados
 
 1. Verifique se as credenciais Cloudflare estão corretas
