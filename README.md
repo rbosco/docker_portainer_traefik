@@ -7,6 +7,43 @@ Estrutura completa para gerenciamento de containers Docker usando Traefik como r
 - **Traefik 2.11.3**: Reverse proxy moderno com suporte a Let's Encrypt
 - **Portainer CE**: Interface web para gerenciamento de containers Docker
 - **Docker Compose**: Orquestração dos serviços
+- **Docker Swarm** (opcional): Suporte completo para clusters e alta disponibilidade
+
+## 🐝 Docker Swarm
+
+Este projeto inclui **suporte completo para Docker Swarm**!
+
+**Características:**
+- ✅ Alta disponibilidade com múltiplos nodes
+- ✅ Load balancing automático
+- ✅ Rolling updates sem downtime
+- ✅ Escalabilidade horizontal
+- ✅ Failover automático
+
+**Arquivos para Swarm:**
+- `docker-stack.yml` - Stack otimizada para Swarm
+- `swarm-init.sh` - Script de inicialização do cluster
+- `swarm-deploy.sh` - Script de deploy e gerenciamento
+- `README-SWARM.md` - **[Documentação completa do Swarm](README-SWARM.md)** 📖
+
+**URLs customizadas:**
+- Traefik Dashboard: `https://pr.seudominio.com`
+- Portainer: `https://painel.seudominio.com`
+
+**Início rápido com Swarm:**
+```bash
+# 1. Inicializar Swarm
+./swarm-init.sh
+
+# 2. Configurar .env
+cp .env.example .env
+nano .env
+
+# 3. Deploy da stack
+./swarm-deploy.sh
+```
+
+📚 **[Leia a documentação completa do Swarm →](README-SWARM.md)**
 
 ## 🏗️ Estrutura do Projeto
 
