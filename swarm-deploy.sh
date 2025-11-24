@@ -106,8 +106,61 @@ else
     print_success "Rede 'proxy' já existe"
 fi
 
+# Escolher a stack
+print_header "Escolha a Stack"
+
+echo -e "${YELLOW}Qual stack deseja gerenciar?${NC}"
+echo "1) Traefik + Portainer (Infraestrutura)"
+echo "2) WordPress"
+echo
+read -p "Stack [1]: " STACK_CHOICE
+STACK_CHOICE=${STACK_CHOICE:-1}
+
+case $STACK_CHOICE in
+    1)
+        STACK_NAME="traefik"
+        STACK_FILE="docker-stack.yml"
+        STACK_DESCRIPTION="Traefik + Portainer"
+        ;;
+    2)
+        STACK_NAME="wordpress"
+        STACK_FILE="docker-stack-wordpress.yml"
+        STACK_DESCRIPTION="WordPress"
+
+        # Verificar se a stack traefik está rodando
+        if ! docker stack ls | grep -q "traefik"; then
+            print_error "A stack Traefik precisa estar rodando antes do WordPress"
+            print_info "Execute primeiro o deploy do Traefik (opção 1)"
+            exit 1
+        fi
+
+        # Verificar variáveis WordPress
+        WORDPRESS_VARS=("WORDPRESS_DB_NAME" "WORDPRESS_DB_USER" "WORDPRESS_DB_PASSWORD" "WORDPRESS_DB_ROOT_PASSWORD")
+        for var in "${WORDPRESS_VARS[@]}"; do
+            if [ -z "${!var}" ]; then
+                print_error "Variável $var não definida no .env"
+                print_info "Configure as variáveis do WordPress no arquivo .env"
+                exit 1
+            fi
+        done
+
+        # Criar diretórios WordPress
+        print_info "Criando diretórios do WordPress..."
+        mkdir -p data/wordpress/wp-content
+        mkdir -p data/wordpress/uploads
+        mkdir -p data/wordpress/mysql
+        mkdir -p backups/wordpress/mysql
+        mkdir -p backups/wordpress/files
+        print_success "Diretórios criados"
+        ;;
+    *)
+        print_error "Opção inválida"
+        exit 1
+        ;;
+esac
+
 # Opções de deploy
-print_header "Opções de Deploy"
+print_header "Opções de Deploy - ${STACK_DESCRIPTION}"
 
 echo -e "${YELLOW}O que deseja fazer?${NC}"
 echo "1) Deploy/Atualizar stack"
@@ -118,8 +171,6 @@ echo "5) Limpeza completa (stack + volumes + rede)"
 echo
 read -p "Opção [1]: " DEPLOY_OPTION
 DEPLOY_OPTION=${DEPLOY_OPTION:-1}
-
-STACK_NAME="traefik"
 
 case $DEPLOY_OPTION in
     1)
@@ -139,7 +190,7 @@ case $DEPLOY_OPTION in
 
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
-        docker stack deploy -c docker-stack.yml --with-registry-auth "$STACK_NAME"
+        docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
 
         print_success "Stack deployed!"
 
@@ -161,17 +212,39 @@ case $DEPLOY_OPTION in
         echo -e "${GREEN}║           SERVIÇOS DISPONÍVEIS                         ║${NC}"
         echo -e "${GREEN}╚════════════════════════════════════════════════════════╝${NC}"
         echo
-        echo -e "${BLUE}Traefik Dashboard:${NC}"
-        echo -e "  URL: ${YELLOW}https://pr.${DOMAIN}${NC}"
-        echo -e "  ${YELLOW}(Autenticação configurada via TRAEFIK_USER)${NC}"
-        echo
-        echo -e "${BLUE}Portainer:${NC}"
-        echo -e "  URL: ${YELLOW}https://painel.${DOMAIN}${NC}"
-        echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
-        echo
-        print_warning "Certifique-se de que os DNS estão configurados:"
-        echo -e "  ${YELLOW}pr.${DOMAIN}${NC} → IP do servidor"
-        echo -e "  ${YELLOW}painel.${DOMAIN}${NC} → IP do servidor"
+
+        if [ "$STACK_NAME" = "traefik" ]; then
+            echo -e "${BLUE}Traefik Dashboard:${NC}"
+            echo -e "  URL: ${YELLOW}https://pr.${DOMAIN}${NC}"
+            echo -e "  ${YELLOW}(Autenticação configurada via TRAEFIK_USER)${NC}"
+            echo
+            echo -e "${BLUE}Portainer:${NC}"
+            echo -e "  URL: ${YELLOW}https://painel.${DOMAIN}${NC}"
+            echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
+            echo
+            print_warning "Certifique-se de que os DNS estão configurados:"
+            echo -e "  ${YELLOW}pr.${DOMAIN}${NC} → IP do servidor"
+            echo -e "  ${YELLOW}painel.${DOMAIN}${NC} → IP do servidor"
+        elif [ "$STACK_NAME" = "wordpress" ]; then
+            echo -e "${BLUE}WordPress:${NC}"
+            echo -e "  URL: ${YELLOW}https://${DOMAIN}${NC}"
+            echo -e "  ${YELLOW}Configure o site no primeiro acesso${NC}"
+            echo
+            echo -e "${BLUE}Database:${NC}"
+            echo -e "  Host: ${YELLOW}mysql${NC}"
+            echo -e "  Database: ${YELLOW}${WORDPRESS_DB_NAME}${NC}"
+            echo -e "  User: ${YELLOW}${WORDPRESS_DB_USER}${NC}"
+            echo
+            echo -e "${BLUE}Redis Cache:${NC}"
+            echo -e "  Host: ${YELLOW}redis${NC}"
+            echo -e "  Port: ${YELLOW}6379${NC}"
+            echo
+            print_warning "Certifique-se de que o DNS está configurado:"
+            echo -e "  ${YELLOW}${DOMAIN}${NC} → IP do servidor"
+            echo
+            print_info "Para executar backup manualmente:"
+            echo -e "  ${YELLOW}docker exec \$(docker ps -q -f name=wordpress_backup) /backup.sh${NC}"
+        fi
         echo
         ;;
 
@@ -227,20 +300,41 @@ case $DEPLOY_OPTION in
             exit 1
         fi
 
-        echo -e "${YELLOW}Escolha o serviço:${NC}"
-        echo "1) Traefik"
-        echo "2) Portainer"
-        echo "3) Agent"
-        echo
-        read -p "Opção [1]: " SERVICE_OPTION
-        SERVICE_OPTION=${SERVICE_OPTION:-1}
+        if [ "$STACK_NAME" = "traefik" ]; then
+            echo -e "${YELLOW}Escolha o serviço:${NC}"
+            echo "1) Traefik"
+            echo "2) Portainer"
+            echo "3) Agent"
+            echo
+            read -p "Opção [1]: " SERVICE_OPTION
+            SERVICE_OPTION=${SERVICE_OPTION:-1}
 
-        case $SERVICE_OPTION in
-            1) SERVICE="traefik" ;;
-            2) SERVICE="portainer" ;;
-            3) SERVICE="agent" ;;
-            *) SERVICE="traefik" ;;
-        esac
+            case $SERVICE_OPTION in
+                1) SERVICE="traefik" ;;
+                2) SERVICE="portainer" ;;
+                3) SERVICE="agent" ;;
+                *) SERVICE="traefik" ;;
+            esac
+        elif [ "$STACK_NAME" = "wordpress" ]; then
+            echo -e "${YELLOW}Escolha o serviço:${NC}"
+            echo "1) WordPress"
+            echo "2) Nginx"
+            echo "3) MySQL"
+            echo "4) Redis"
+            echo "5) Backup"
+            echo
+            read -p "Opção [1]: " SERVICE_OPTION
+            SERVICE_OPTION=${SERVICE_OPTION:-1}
+
+            case $SERVICE_OPTION in
+                1) SERVICE="wordpress" ;;
+                2) SERVICE="nginx" ;;
+                3) SERVICE="mysql" ;;
+                4) SERVICE="redis" ;;
+                5) SERVICE="backup" ;;
+                *) SERVICE="wordpress" ;;
+            esac
+        fi
 
         print_info "Exibindo logs do serviço: ${STACK_NAME}_${SERVICE}"
         echo
@@ -254,7 +348,9 @@ case $DEPLOY_OPTION in
         echo -e "${RED}ATENÇÃO: Esta opção irá:${NC}"
         echo "  - Remover a stack '$STACK_NAME'"
         echo "  - Remover todos os volumes (dados persistentes)"
-        echo "  - Remover a rede 'proxy'"
+        if [ "$STACK_NAME" = "traefik" ]; then
+            echo "  - Remover a rede 'proxy'"
+        fi
         echo "  ${RED}TODOS OS DADOS SERÃO PERDIDOS!${NC}"
         echo
 
@@ -275,18 +371,45 @@ case $DEPLOY_OPTION in
 
             # Remover volumes antigos (se existirem)
             print_info "Removendo volumes antigos (se existirem)..."
-            # Nota: Agora usamos bind mounts (./data), mas removemos volumes antigos caso existam
-            docker volume rm traefik_traefik-certificates 2>/dev/null || true
-            docker volume rm traefik_traefik-data 2>/dev/null || true
-            docker volume rm traefik_portainer-data 2>/dev/null || true
-            docker volume rm traefik-certificates 2>/dev/null || true
-            docker volume rm traefik-data 2>/dev/null || true
-            docker volume rm portainer-data 2>/dev/null || true
+
+            if [ "$STACK_NAME" = "traefik" ]; then
+                # Nota: Agora usamos bind mounts (./data), mas removemos volumes antigos caso existam
+                docker volume rm traefik_traefik-certificates 2>/dev/null || true
+                docker volume rm traefik_traefik-data 2>/dev/null || true
+                docker volume rm traefik_portainer-data 2>/dev/null || true
+                docker volume rm traefik-certificates 2>/dev/null || true
+                docker volume rm traefik-data 2>/dev/null || true
+                docker volume rm portainer-data 2>/dev/null || true
+            elif [ "$STACK_NAME" = "wordpress" ]; then
+                docker volume rm wordpress_wordpress-data 2>/dev/null || true
+                docker volume rm wordpress_mysql-data 2>/dev/null || true
+                docker volume rm wordpress_redis-data 2>/dev/null || true
+            fi
+
             print_success "Volumes antigos limpos (se existiam)"
 
-            # Remover rede
-            print_info "Removendo rede 'proxy'..."
-            docker network rm proxy 2>/dev/null && print_success "Rede 'proxy' removida" || print_warning "Rede 'proxy' não encontrada"
+            # Remover dados locais
+            if [ "$STACK_NAME" = "traefik" ]; then
+                print_warning "Remover dados locais em ./data/traefik e ./data/portainer?"
+                read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA
+                if [ "$CONFIRM_DATA" = "SIM" ]; then
+                    rm -rf data/traefik/* data/portainer/*
+                    print_success "Dados locais removidos"
+                fi
+            elif [ "$STACK_NAME" = "wordpress" ]; then
+                print_warning "Remover dados locais em ./data/wordpress e ./backups/wordpress?"
+                read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA
+                if [ "$CONFIRM_DATA" = "SIM" ]; then
+                    rm -rf data/wordpress/* backups/wordpress/*
+                    print_success "Dados locais removidos"
+                fi
+            fi
+
+            # Remover rede (apenas para traefik)
+            if [ "$STACK_NAME" = "traefik" ]; then
+                print_info "Removendo rede 'proxy'..."
+                docker network rm proxy 2>/dev/null && print_success "Rede 'proxy' removida" || print_warning "Rede 'proxy' não encontrada"
+            fi
 
             echo
             print_success "Limpeza completa finalizada!"
