@@ -46,11 +46,11 @@ services:
     depends_on:
       - wordpress
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost"]
+      test: ["CMD-SHELL", "pgrep nginx || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 60s
+      start_period: 30s
     deploy:
       mode: replicated
       replicas: 1
