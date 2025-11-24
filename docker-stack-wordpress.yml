@@ -18,6 +18,12 @@ services:
     networks:
       - wordpress_internal
       - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /var/www/html/wp-config.php || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     deploy:
       mode: replicated
       replicas: 1
@@ -39,6 +45,12 @@ services:
       - proxy
     depends_on:
       - wordpress
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     deploy:
       mode: replicated
       replicas: 1
@@ -47,8 +59,8 @@ services:
           - node.role == manager
       restart_policy:
         condition: on-failure
-        delay: 5s
-        max_attempts: 3
+        delay: 10s
+        max_attempts: 5
       labels:
         - "traefik.enable=true"
         # HTTP
@@ -81,6 +93,12 @@ services:
       - ./backups/wordpress/mysql:/backups
     networks:
       - wordpress_internal
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${WORDPRESS_DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     deploy:
       mode: replicated
       replicas: 1
@@ -97,6 +115,12 @@ services:
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     networks:
       - wordpress_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     deploy:
       mode: replicated
       replicas: 1
