@@ -79,9 +79,8 @@ print_success "Arquivo .env encontrado"
 
 # Carregar variáveis do .env
 print_info "Carregando variáveis de ambiente do .env..."
-set -a
-source .env
-set +a
+# Usar export com xargs para evitar expansão de variáveis pelo bash
+export $(grep -v '^#' .env | grep -v '^$' | xargs)
 print_success "Variáveis de ambiente carregadas"
 
 # Verificar variáveis obrigatórias
