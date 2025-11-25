@@ -13,8 +13,7 @@ services:
           define('WP_CACHE', true);
           define('WP_CACHE_KEY_SALT', '${DOMAIN}');
     volumes:
-      - ./data/wordpress/wp-content:/var/www/html/wp-content
-      - ./data/wordpress/uploads:/var/www/html/wp-content/uploads
+      - wordpress_data:/var/www/html
     networks:
       - wordpress_internal
       - proxy
@@ -38,7 +37,7 @@ services:
   nginx:
     image: nginx:alpine
     volumes:
-      - ./data/wordpress/wp-content:/var/www/html/wp-content:ro
+      - wordpress_data:/var/www/html:ro
       - ./config/nginx/wordpress.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - wordpress_internal
@@ -141,7 +140,7 @@ services:
       - MYSQL_PASSWORD=${WORDPRESS_DB_PASSWORD}
       - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}
     volumes:
-      - ./data/wordpress/wp-content:/var/www/html/wp-content:ro
+      - wordpress_data:/var/www/html:ro
       - ./backups/wordpress:/backups
       - ./scripts/wordpress-backup.sh:/backup.sh:ro
     networks:
@@ -158,6 +157,10 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+
+volumes:
+  wordpress_data:
+    driver: local
 
 networks:
   wordpress_internal:
