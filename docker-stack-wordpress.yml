@@ -10,6 +10,7 @@ services:
       # Redis será configurado após instalar o plugin Redis Object Cache
     volumes:
       - wordpress_data:/var/www/html
+      - ./config/php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
     networks:
       - wordpress_internal
       - traefik_proxy
