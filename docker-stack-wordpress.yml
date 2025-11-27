@@ -62,11 +62,11 @@ services:
         - "traefik.docker.network=traefik_proxy"
         # HTTP
         - "traefik.http.routers.wordpress.entrypoints=http"
-        - "traefik.http.routers.wordpress.rule=Host(`${DOMAIN}`)"
+        - "traefik.http.routers.wordpress.rule=Host(`www.${DOMAIN}`) || Host(`${DOMAIN}`)"
         - "traefik.http.routers.wordpress.middlewares=wordpress-https-redirect"
         # HTTPS
         - "traefik.http.routers.wordpress-secure.entrypoints=https"
-        - "traefik.http.routers.wordpress-secure.rule=Host(`${DOMAIN}`)"
+        - "traefik.http.routers.wordpress-secure.rule=Host(`www.${DOMAIN}`) || Host(`${DOMAIN}`)"
         - "traefik.http.routers.wordpress-secure.tls=true"
         - "traefik.http.routers.wordpress-secure.tls.certresolver=cloudflare"
         - "traefik.http.routers.wordpress-secure.service=wordpress"
