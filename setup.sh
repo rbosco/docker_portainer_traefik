@@ -38,9 +38,9 @@ print_info() {
 # Verificar se está rodando como root
 check_root() {
     if [ "$EUID" -eq 0 ]; then
-        print_warning "Não execute este script como root"
-        print_info "Execute como usuário normal com acesso ao Docker"
-        exit 1
+        print_warning "Você está executando como root. Isso não é recomendado."
+        print_info "Prefira executar como usuário normal com acesso ao Docker"
+        echo
     fi
 }
 
