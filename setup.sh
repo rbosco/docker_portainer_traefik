@@ -38,9 +38,9 @@ print_info() {
 # Verificar se está rodando como root
 check_root() {
     if [ "$EUID" -eq 0 ]; then
-        print_warning "Não execute este script como root"
-        print_info "Execute como usuário normal com acesso ao Docker"
-        exit 1
+        print_warning "Você está executando como root. Isso não é recomendado."
+        print_info "Prefira executar como usuário normal com acesso ao Docker"
+        echo
     fi
 }
 
@@ -195,6 +195,14 @@ collect_information() {
     read -p "Subdomínio do Portainer [painel]: " SUBDOMAIN_PORTAINER
     SUBDOMAIN_PORTAINER=${SUBDOMAIN_PORTAINER:-painel}
 
+    echo -e "${YELLOW}Exemplos: n8n, automacao, workflows${NC}"
+    read -p "Subdomínio do n8n [n8n]: " SUBDOMAIN_N8N
+    SUBDOMAIN_N8N=${SUBDOMAIN_N8N:-n8n}
+
+    echo -e "${YELLOW}Exemplos: remotion, video, studio${NC}"
+    read -p "Subdomínio do Remotion [remotion]: " SUBDOMAIN_REMOTION
+    SUBDOMAIN_REMOTION=${SUBDOMAIN_REMOTION:-remotion}
+
     # Cloudflare (apenas para produção)
     if [ "$INSTALL_MODE" = "2" ]; then
         echo
@@ -229,12 +237,23 @@ DOMAIN=$DOMAIN
 # Subdomains configuration
 SUBDOMAIN_TRAEFIK=$SUBDOMAIN_TRAEFIK
 SUBDOMAIN_PORTAINER=$SUBDOMAIN_PORTAINER
+SUBDOMAIN_N8N=$SUBDOMAIN_N8N
+SUBDOMAIN_REMOTION=$SUBDOMAIN_REMOTION
 
 # Timezone
 TZ=$TZ
 
 # Traefik Dashboard Authentication
 TRAEFIK_USER=$TRAEFIK_USER
+EOF
+
+    # n8n encryption key
+    N8N_ENCRYPTION_KEY=$(openssl rand -hex 32 2>/dev/null || cat /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
+    cat >> .env << EOF
+
+# n8n Configuration
+N8N_PROTOCOL=https
+N8N_ENCRYPTION_KEY=$N8N_ENCRYPTION_KEY
 EOF
 
     if [ "$INSTALL_MODE" = "2" ]; then
@@ -254,7 +273,7 @@ prepare_directories() {
     print_header "Preparando Estrutura de Diretórios"
 
     # Criar diretórios se não existirem
-    mkdir -p data/traefik data/portainer traefik/dynamic
+    mkdir -p data/traefik data/portainer data/n8n data/remotion/output traefik/dynamic remotion/project
     print_success "Diretórios criados"
 
     # Criar e configurar acme.json
@@ -389,6 +408,16 @@ show_access_info() {
         echo -e "  Via proxy: ${YELLOW}http://$SUBDOMAIN_PORTAINER.$DOMAIN${NC}"
         echo -e "  Direto:    ${YELLOW}http://localhost:9000${NC}"
         echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
+        echo
+        echo -e "${BLUE}n8n (Automação de Workflows):${NC}"
+        echo -e "  Via proxy: ${YELLOW}http://$SUBDOMAIN_N8N.$DOMAIN${NC}"
+        echo -e "  Direto:    ${YELLOW}http://localhost:5678${NC}"
+        echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
+        echo
+        echo -e "${BLUE}Remotion Studio (Renderização de Vídeo):${NC}"
+        echo -e "  Via proxy: ${YELLOW}http://$SUBDOMAIN_REMOTION.$DOMAIN${NC}"
+        echo -e "  ${YELLOW}Coloque seu projeto em: ./remotion/project/${NC}"
+        echo -e "  ${YELLOW}Vídeos renderizados em: ./data/remotion/output/${NC}"
     else
         echo -e "${BLUE}Traefik Dashboard:${NC}"
         echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_TRAEFIK.$DOMAIN${NC}"
@@ -399,9 +428,20 @@ show_access_info() {
         echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_PORTAINER.$DOMAIN${NC}"
         echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
         echo
+        echo -e "${BLUE}n8n (Automação de Workflows):${NC}"
+        echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_N8N.$DOMAIN${NC}"
+        echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
+        echo
+        echo -e "${BLUE}Remotion Studio (Renderização de Vídeo):${NC}"
+        echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_REMOTION.$DOMAIN${NC}"
+        echo -e "  ${YELLOW}Coloque seu projeto em: ./remotion/project/${NC}"
+        echo -e "  ${YELLOW}Vídeos renderizados em: ./data/remotion/output/${NC}"
+        echo
         print_warning "Certifique-se de que os registros DNS estão configurados:"
         echo -e "  ${YELLOW}$SUBDOMAIN_TRAEFIK.$DOMAIN${NC} → IP do servidor"
         echo -e "  ${YELLOW}$SUBDOMAIN_PORTAINER.$DOMAIN${NC} → IP do servidor"
+        echo -e "  ${YELLOW}$SUBDOMAIN_N8N.$DOMAIN${NC} → IP do servidor"
+        echo -e "  ${YELLOW}$SUBDOMAIN_REMOTION.$DOMAIN${NC} → IP do servidor"
     fi
 
     echo
