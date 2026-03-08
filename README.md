@@ -1,6 +1,6 @@
-# Docker Stack: Traefik 2.10.7 + Portainer
+# Docker Stack: Traefik 2.10.7 + Portainer + n8n + Remotion
 
-Estrutura completa para gerenciamento de containers Docker usando Traefik como reverse proxy e Portainer como interface de gerenciamento.
+Estrutura completa para gerenciamento de containers Docker usando Traefik como reverse proxy, Portainer como interface de gerenciamento, n8n para automação de workflows e Remotion para renderização de vídeo programática.
 
 ## ⚠️ Requisitos Importantes
 
@@ -25,6 +25,8 @@ docker version --format '{{.Server.Version}}'
 
 - **Traefik 2.10.7**: Reverse proxy moderno com suporte a Let's Encrypt (compatível com Docker 24.0.7)
 - **Portainer CE**: Interface web para gerenciamento de containers Docker
+- **n8n**: Plataforma de automação de workflows com mais de 400 integrações nativas
+- **Remotion Studio**: Renderização de vídeo programática com React (para VSLs e criativos)
 - **Docker Compose**: Orquestração dos serviços
 - **Docker Swarm** (opcional): Suporte completo para clusters e alta disponibilidade
 
@@ -48,6 +50,8 @@ Este projeto inclui **suporte completo para Docker Swarm**!
 **URLs customizadas:**
 - Traefik Dashboard: `https://pr.seudominio.com`
 - Portainer: `https://painel.seudominio.com`
+- n8n: `https://n8n.seudominio.com`
+- Remotion Studio: `https://remotion.seudominio.com`
 
 **Início rápido com Swarm:**
 ```bash
@@ -83,10 +87,17 @@ nano .env
 │   ├── traefik-swarm.yml     # Configuração Traefik (Swarm)
 │   └── dynamic/
 │       └── tls.yml           # Configuração TLS dinâmica
+├── remotion/
+│   ├── Dockerfile            # Imagem do Remotion Studio
+│   ├── entrypoint.sh         # Script de inicialização
+│   └── project/              # Seu projeto Remotion (coloque aqui)
 └── data/                      # Dados persistentes (não versionado)
     ├── traefik/
     │   └── acme.json         # Certificados Let's Encrypt
-    └── portainer/            # Dados do Portainer
+    ├── portainer/            # Dados do Portainer
+    ├── n8n/                  # Dados e workflows do n8n
+    └── remotion/
+        └── output/           # Vídeos renderizados pelo Remotion
 ```
 
 ## 🎯 Modos de Instalação
@@ -239,6 +250,16 @@ docker-compose logs -f
   - Direto: http://localhost:9000
   - Configure o usuário admin no primeiro acesso
 
+- **n8n (Automação de Workflows)**:
+  - Via proxy: http://n8n.localhost
+  - Direto: http://localhost:5678
+  - Configure o usuário admin no primeiro acesso
+
+- **Remotion Studio (Renderização de Vídeo)**:
+  - Via proxy: http://remotion.localhost
+  - Coloque seu projeto em: `./remotion/project/`
+  - Vídeos renderizados em: `./data/remotion/output/`
+
 **Produção (com domínio configurado):**
 
 - **Traefik Dashboard**: https://pr.seudominio.com
@@ -252,13 +273,27 @@ docker-compose logs -f
   - Visualização de logs e métricas
   - **Swarm:** Gerenciamento completo de nodes
 
+- **n8n**: https://n8n.seudominio.com
+  - Plataforma de automação com 400+ integrações
+  - Criação de workflows visuais
+  - Webhooks, agendamentos e integrações com APIs
+  - Integração com Remotion para automação de vídeo
+
+- **Remotion Studio**: https://remotion.seudominio.com
+  - Visualização e edição de composições de vídeo
+  - Preview em tempo real das animações React
+  - Renderização de VSLs e criativos
+  - Saída de vídeos em `./data/remotion/output/`
+
 **Configuração DNS necessária:**
 ```
-A    pr       SEU_IP_SERVIDOR
-A    painel   SEU_IP_SERVIDOR
+A    pr        SEU_IP_SERVIDOR
+A    painel    SEU_IP_SERVIDOR
+A    n8n       SEU_IP_SERVIDOR
+A    remotion  SEU_IP_SERVIDOR
 
 # Ou com wildcard:
-A    *        SEU_IP_SERVIDOR
+A    *         SEU_IP_SERVIDOR
 ```
 
 ## ⚙️ Configuração
@@ -271,6 +306,8 @@ Você pode customizar os subdomínios dos serviços editando o arquivo `.env`:
 # Subdomínios padrão
 SUBDOMAIN_TRAEFIK=pr
 SUBDOMAIN_PORTAINER=painel
+SUBDOMAIN_N8N=n8n
+SUBDOMAIN_REMOTION=remotion
 ```
 
 **Exemplos de customização:**
@@ -279,6 +316,8 @@ SUBDOMAIN_PORTAINER=painel
 # Usar subdomínios tradicionais
 SUBDOMAIN_TRAEFIK=traefik
 SUBDOMAIN_PORTAINER=portainer
+SUBDOMAIN_N8N=automacao
+SUBDOMAIN_REMOTION=studio
 
 # Usar nomes personalizados
 SUBDOMAIN_TRAEFIK=dashboard
@@ -559,6 +598,69 @@ docker stats
 
 # Ver eventos em tempo real
 docker events --filter type=service
+```
+
+## 🎬 n8n + Remotion: Automação de VSL e Criativos
+
+Esta stack inclui um pipeline completo para geração automatizada de vídeos (VSLs e criativos) usando n8n como orquestrador e Remotion como motor de renderização.
+
+### Fluxo de Automação
+
+```
+Gatilho (Webhook/Agendamento)
+    │
+    ▼
+  n8n Workflow
+    │
+    ├─→ Gera script/conteúdo (OpenAI, Claude, etc.)
+    │
+    ├─→ Executa renderização Remotion via Docker CLI
+    │       docker exec remotion npx remotion render \
+    │         src/index.ts <Composicao> out/video.mp4 \
+    │         --props='{"titulo":"...", "conteudo":"..."}'
+    │
+    └─→ Distribui o vídeo (upload S3, notificação, etc.)
+```
+
+### Configurar Projeto Remotion
+
+1. Coloque seu projeto Remotion em `./remotion/project/`:
+```bash
+cd remotion/project
+npx create-video@latest .   # ou copie seu projeto existente
+```
+
+2. O container instala as dependências automaticamente na inicialização.
+
+3. Acesse o Remotion Studio para preview das composições:
+```
+https://remotion.seudominio.com
+```
+
+### Renderizar Vídeo via n8n
+
+No n8n, use o nó **Execute Command** ou **HTTP Request** para acionar renderizações:
+
+**Via Execute Command (n8n no mesmo servidor):**
+```bash
+docker exec remotion npx remotion render \
+  src/index.ts MinhaComposicao \
+  /app/out/video-{{ $now }}.mp4 \
+  --props='{"titulo":"{{ $json.titulo }}", "texto":"{{ $json.texto }}"}'
+```
+
+**Verificar vídeo renderizado:**
+- Os vídeos ficam em `./data/remotion/output/` no servidor
+- Configure no n8n um nó para mover/enviar o arquivo após renderização
+
+### Backup dos dados
+
+```bash
+# Backup dos workflows do n8n
+tar -czf n8n-backup-$(date +%Y%m%d).tar.gz data/n8n/
+
+# Backup dos vídeos renderizados
+tar -czf remotion-output-$(date +%Y%m%d).tar.gz data/remotion/output/
 ```
 
 ## 🛡️ Segurança
