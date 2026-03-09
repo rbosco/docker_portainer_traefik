@@ -12,6 +12,11 @@ entryPoints:
           scheme: https
   https:
     address: ":443"
+    transport:
+      respondingTimeouts:
+        readTimeout: 0    # sem limite — necessário para workflows longos do n8n
+        writeTimeout: 0   # sem limite
+        idleTimeout: 600  # 10 min para conexões SSE/WebSocket do editor
 
 serversTransport:
   insecureSkipVerify: true

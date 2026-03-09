@@ -9,6 +9,8 @@ services:
       - N8N_EDITOR_BASE_URL=https://${SUBDOMAIN_N8N:-n8n}.${DOMAIN}/
       - WEBHOOK_URL=https://${SUBDOMAIN_N8N:-n8n}.${DOMAIN}/
       - N8N_SECURE_COOKIE=false
+      - N8N_TRUST_PROXY_HEADER=true
+      - N8N_PROXY_HOPS=1
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/n8n:/home/node/.n8n
