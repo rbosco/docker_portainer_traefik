@@ -309,6 +309,14 @@ case $DEPLOY_OPTION in
 
             print_info "Aguardando limpeza dos containers..."
             sleep 10
+
+            # Limpar variáveis n8n do .env para forçar nova configuração no próximo deploy
+            if [ "$STACK_NAME" = "n8n" ]; then
+                sed -i '/^SUBDOMAIN_N8N=/d' .env
+                sed -i '/^N8N_ENCRYPTION_KEY=/d' .env
+                print_info "Variáveis SUBDOMAIN_N8N e N8N_ENCRYPTION_KEY removidas do .env"
+                print_info "No próximo deploy do n8n, você será solicitado a configurá-las novamente"
+            fi
         else
             print_info "Operação cancelada"
         fi
@@ -451,6 +459,11 @@ case $DEPLOY_OPTION in
                     rm -rf data/n8n/*
                     print_success "Dados locais removidos"
                 fi
+                # Limpar variáveis n8n do .env para forçar nova configuração no próximo deploy
+                sed -i '/^SUBDOMAIN_N8N=/d' .env
+                sed -i '/^N8N_ENCRYPTION_KEY=/d' .env
+                print_info "Variáveis SUBDOMAIN_N8N e N8N_ENCRYPTION_KEY removidas do .env"
+                print_info "No próximo deploy do n8n, você será solicitado a configurá-las novamente"
             elif [ "$STACK_NAME" = "wordpress" ]; then
                 print_warning "Remover dados locais em ./data/wordpress e ./backups/wordpress?"
                 read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA
