@@ -17,6 +17,9 @@ services:
       - --certificatesresolvers.cloudflare.acme.dnschallenge.resolvers=1.1.1.1:53,1.0.0.1:53
       - --log.level=INFO
       - --accesslog=true
+      - --entrypoints.https.transport.respondingTimeouts.readTimeout=0
+      - --entrypoints.https.transport.respondingTimeouts.writeTimeout=0
+      - --entrypoints.https.transport.respondingTimeouts.idleTimeout=600
     ports:
       - target: 80
         published: 80
