@@ -226,6 +226,20 @@ case $DEPLOY_OPTION in
             fi
         fi
 
+        # Validar variáveis críticas antes do deploy
+        if [ -z "$DOMAIN" ]; then
+            print_error "Variável DOMAIN está vazia! Verifique o arquivo .env"
+            exit 1
+        fi
+        if [ "$STACK_NAME" = "n8n" ]; then
+            if [ -z "$SUBDOMAIN_N8N" ] || [ -z "$N8N_ENCRYPTION_KEY" ]; then
+                print_error "Variáveis SUBDOMAIN_N8N ou N8N_ENCRYPTION_KEY estão vazias!"
+                print_info "Execute o script novamente para configurá-las"
+                exit 1
+            fi
+            print_info "Deploy com: SUBDOMAIN_N8N=$SUBDOMAIN_N8N | DOMAIN=$DOMAIN"
+        fi
+
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
         docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
