@@ -195,9 +195,18 @@ collect_information() {
     read -p "Subdomínio do Portainer [painel]: " SUBDOMAIN_PORTAINER
     SUBDOMAIN_PORTAINER=${SUBDOMAIN_PORTAINER:-painel}
 
-    echo -e "${YELLOW}Exemplos: n8n, automacao, workflows${NC}"
-    read -p "Subdomínio do n8n [n8n]: " SUBDOMAIN_N8N
-    SUBDOMAIN_N8N=${SUBDOMAIN_N8N:-n8n}
+    # Opção de instalar n8n
+    echo
+    read -p "Instalar n8n (automação de workflows)? [S/n]: " INSTALL_N8N_CHOICE
+    if [[ "$INSTALL_N8N_CHOICE" =~ ^[Nn]$ ]]; then
+        INSTALL_N8N="false"
+        print_info "n8n não será instalado"
+    else
+        INSTALL_N8N="true"
+        echo -e "${YELLOW}Exemplos: n8n, automacao, workflows${NC}"
+        read -p "Subdomínio do n8n [n8n]: " SUBDOMAIN_N8N
+        SUBDOMAIN_N8N=${SUBDOMAIN_N8N:-n8n}
+    fi
 
     echo -e "${YELLOW}Exemplos: remotion, video, studio${NC}"
     read -p "Subdomínio do Remotion [remotion]: " SUBDOMAIN_REMOTION
@@ -237,7 +246,6 @@ DOMAIN=$DOMAIN
 # Subdomains configuration
 SUBDOMAIN_TRAEFIK=$SUBDOMAIN_TRAEFIK
 SUBDOMAIN_PORTAINER=$SUBDOMAIN_PORTAINER
-SUBDOMAIN_N8N=$SUBDOMAIN_N8N
 SUBDOMAIN_REMOTION=$SUBDOMAIN_REMOTION
 
 # Timezone
@@ -247,14 +255,17 @@ TZ=$TZ
 TRAEFIK_USER=$TRAEFIK_USER
 EOF
 
-    # n8n encryption key
-    N8N_ENCRYPTION_KEY=$(openssl rand -hex 32 2>/dev/null || cat /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
-    cat >> .env << EOF
+    if [ "$INSTALL_N8N" = "true" ]; then
+        # n8n encryption key
+        N8N_ENCRYPTION_KEY=$(openssl rand -hex 32 2>/dev/null || cat /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
+        cat >> .env << EOF
 
 # n8n Configuration
+SUBDOMAIN_N8N=$SUBDOMAIN_N8N
 N8N_PROTOCOL=https
 N8N_ENCRYPTION_KEY=$N8N_ENCRYPTION_KEY
 EOF
+    fi
 
     if [ "$INSTALL_MODE" = "2" ]; then
         cat >> .env << EOF
@@ -273,7 +284,10 @@ prepare_directories() {
     print_header "Preparando Estrutura de Diretórios"
 
     # Criar diretórios se não existirem
-    mkdir -p data/traefik data/portainer data/n8n data/remotion/output traefik/dynamic remotion/project
+    mkdir -p data/traefik data/portainer data/remotion/output traefik/dynamic remotion/project
+    if [ "$INSTALL_N8N" = "true" ]; then
+        mkdir -p data/n8n
+    fi
     print_success "Diretórios criados"
 
     # Criar e configurar acme.json
@@ -363,7 +377,11 @@ start_services() {
     docker-compose pull
 
     print_info "Iniciando containers..."
-    docker-compose up -d
+    if [ "$INSTALL_N8N" = "true" ]; then
+        docker-compose up -d
+    else
+        docker-compose up -d traefik portainer remotion
+    fi
 
     print_success "Serviços iniciados!"
 }
@@ -409,11 +427,13 @@ show_access_info() {
         echo -e "  Direto:    ${YELLOW}http://localhost:9000${NC}"
         echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
         echo
-        echo -e "${BLUE}n8n (Automação de Workflows):${NC}"
-        echo -e "  Via proxy: ${YELLOW}http://$SUBDOMAIN_N8N.$DOMAIN${NC}"
-        echo -e "  Direto:    ${YELLOW}http://localhost:5678${NC}"
-        echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
-        echo
+        if [ "$INSTALL_N8N" = "true" ]; then
+            echo -e "${BLUE}n8n (Automação de Workflows):${NC}"
+            echo -e "  Via proxy: ${YELLOW}http://$SUBDOMAIN_N8N.$DOMAIN${NC}"
+            echo -e "  Direto:    ${YELLOW}http://localhost:5678${NC}"
+            echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
+            echo
+        fi
         echo -e "${BLUE}Remotion Studio (Renderização de Vídeo):${NC}"
         echo -e "  Via proxy: ${YELLOW}http://$SUBDOMAIN_REMOTION.$DOMAIN${NC}"
         echo -e "  ${YELLOW}Coloque seu projeto em: ./remotion/project/${NC}"
@@ -428,10 +448,12 @@ show_access_info() {
         echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_PORTAINER.$DOMAIN${NC}"
         echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
         echo
-        echo -e "${BLUE}n8n (Automação de Workflows):${NC}"
-        echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_N8N.$DOMAIN${NC}"
-        echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
-        echo
+        if [ "$INSTALL_N8N" = "true" ]; then
+            echo -e "${BLUE}n8n (Automação de Workflows):${NC}"
+            echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_N8N.$DOMAIN${NC}"
+            echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
+            echo
+        fi
         echo -e "${BLUE}Remotion Studio (Renderização de Vídeo):${NC}"
         echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_REMOTION.$DOMAIN${NC}"
         echo -e "  ${YELLOW}Coloque seu projeto em: ./remotion/project/${NC}"
@@ -440,7 +462,9 @@ show_access_info() {
         print_warning "Certifique-se de que os registros DNS estão configurados:"
         echo -e "  ${YELLOW}$SUBDOMAIN_TRAEFIK.$DOMAIN${NC} → IP do servidor"
         echo -e "  ${YELLOW}$SUBDOMAIN_PORTAINER.$DOMAIN${NC} → IP do servidor"
-        echo -e "  ${YELLOW}$SUBDOMAIN_N8N.$DOMAIN${NC} → IP do servidor"
+        if [ "$INSTALL_N8N" = "true" ]; then
+            echo -e "  ${YELLOW}$SUBDOMAIN_N8N.$DOMAIN${NC} → IP do servidor"
+        fi
         echo -e "  ${YELLOW}$SUBDOMAIN_REMOTION.$DOMAIN${NC} → IP do servidor"
     fi
 
