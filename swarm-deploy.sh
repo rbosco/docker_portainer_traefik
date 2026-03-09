@@ -185,10 +185,11 @@ case $STACK_CHOICE in
             print_success "N8N_ENCRYPTION_KEY já configurada"
         fi
 
-        # Criar diretório n8n
+        # Criar diretório n8n com permissões corretas (n8n roda como uid 1000)
         print_info "Criando diretório de dados do n8n..."
         mkdir -p data/n8n
-        print_success "Diretório criado"
+        chown -R 1000:1000 data/n8n
+        print_success "Diretório criado com permissões corretas (uid 1000)"
         ;;
     *)
         print_error "Opção inválida"
