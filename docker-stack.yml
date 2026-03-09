@@ -139,6 +139,8 @@ services:
       - WEBHOOK_URL=https://${SUBDOMAIN_N8N:-n8n}.${DOMAIN}/
       - GENERIC_TIMEZONE=${TZ:-America/Sao_Paulo}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_TRUST_PROXY_HEADER=true
+      - N8N_PROXY_HOPS=1
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/n8n:/home/node/.n8n
@@ -169,9 +171,12 @@ services:
         - "traefik.http.routers.n8n-secure.tls=true"
         - "traefik.http.routers.n8n-secure.tls.certresolver=cloudflare"
         - "traefik.http.routers.n8n-secure.service=n8n"
+        - "traefik.http.routers.n8n-secure.middlewares=n8n-websocket"
         # Middlewares
         - "traefik.http.middlewares.n8n-https-redirect.redirectscheme.scheme=https"
         - "traefik.http.middlewares.n8n-https-redirect.redirectscheme.permanent=true"
+        - "traefik.http.middlewares.n8n-websocket.headers.customrequestheaders.Upgrade=websocket"
+        - "traefik.http.middlewares.n8n-websocket.headers.customrequestheaders.Connection=Upgrade"
         # Service
         - "traefik.http.services.n8n.loadbalancer.server.port=5678"
 
