@@ -111,6 +111,7 @@ print_header "Escolha a Stack"
 echo -e "${YELLOW}Qual stack deseja gerenciar?${NC}"
 echo "1) Traefik + Portainer (Infraestrutura)"
 echo "2) WordPress"
+echo "3) n8n (Automação de Workflows)"
 echo
 read -p "Stack [1]: " STACK_CHOICE
 STACK_CHOICE=${STACK_CHOICE:-1}
@@ -151,6 +152,33 @@ case $STACK_CHOICE in
         mkdir -p backups/wordpress/mysql
         mkdir -p backups/wordpress/files
         print_success "Diretórios criados"
+        ;;
+    3)
+        STACK_NAME="n8n"
+        STACK_FILE="docker-stack-n8n.yml"
+        STACK_DESCRIPTION="n8n"
+
+        # Verificar se a stack traefik está rodando
+        if ! docker stack ls | grep -q "traefik"; then
+            print_error "A stack Traefik precisa estar rodando antes do n8n"
+            print_info "Execute primeiro o deploy do Traefik (opção 1)"
+            exit 1
+        fi
+
+        # Verificar variáveis n8n
+        N8N_VARS=("N8N_ENCRYPTION_KEY" "SUBDOMAIN_N8N")
+        for var in "${N8N_VARS[@]}"; do
+            if [ -z "${!var}" ]; then
+                print_error "Variável $var não definida no .env"
+                print_info "Configure as variáveis do n8n no arquivo .env"
+                exit 1
+            fi
+        done
+
+        # Criar diretório n8n
+        print_info "Criando diretório de dados do n8n..."
+        mkdir -p data/n8n
+        print_success "Diretório criado"
         ;;
     *)
         print_error "Opção inválida"
@@ -224,6 +252,13 @@ case $DEPLOY_OPTION in
             print_warning "Certifique-se de que os DNS estão configurados:"
             echo -e "  ${YELLOW}pr.${DOMAIN}${NC} → IP do servidor"
             echo -e "  ${YELLOW}painel.${DOMAIN}${NC} → IP do servidor"
+        elif [ "$STACK_NAME" = "n8n" ]; then
+            echo -e "${BLUE}n8n (Automação de Workflows):${NC}"
+            echo -e "  URL: ${YELLOW}https://${SUBDOMAIN_N8N}.${DOMAIN}${NC}"
+            echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
+            echo
+            print_warning "Certifique-se de que o DNS está configurado:"
+            echo -e "  ${YELLOW}${SUBDOMAIN_N8N}.${DOMAIN}${NC} → IP do servidor"
         elif [ "$STACK_NAME" = "wordpress" ]; then
             echo -e "${BLUE}WordPress:${NC}"
             echo -e "  URL: ${YELLOW}https://${DOMAIN}${NC}"
@@ -314,6 +349,8 @@ case $DEPLOY_OPTION in
                 3) SERVICE="agent" ;;
                 *) SERVICE="traefik" ;;
             esac
+        elif [ "$STACK_NAME" = "n8n" ]; then
+            SERVICE="n8n"
         elif [ "$STACK_NAME" = "wordpress" ]; then
             echo -e "${YELLOW}Escolha o serviço:${NC}"
             echo "1) WordPress"
@@ -379,6 +416,8 @@ case $DEPLOY_OPTION in
                 docker volume rm traefik-certificates 2>/dev/null || true
                 docker volume rm traefik-data 2>/dev/null || true
                 docker volume rm portainer-data 2>/dev/null || true
+            elif [ "$STACK_NAME" = "n8n" ]; then
+                docker volume rm n8n_n8n-data 2>/dev/null || true
             elif [ "$STACK_NAME" = "wordpress" ]; then
                 docker volume rm wordpress_wordpress-data 2>/dev/null || true
                 docker volume rm wordpress_mysql-data 2>/dev/null || true
@@ -393,6 +432,13 @@ case $DEPLOY_OPTION in
                 read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA
                 if [ "$CONFIRM_DATA" = "SIM" ]; then
                     rm -rf data/traefik/* data/portainer/*
+                    print_success "Dados locais removidos"
+                fi
+            elif [ "$STACK_NAME" = "n8n" ]; then
+                print_warning "Remover dados locais em ./data/n8n?"
+                read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA
+                if [ "$CONFIRM_DATA" = "SIM" ]; then
+                    rm -rf data/n8n/*
                     print_success "Dados locais removidos"
                 fi
             elif [ "$STACK_NAME" = "wordpress" ]; then
