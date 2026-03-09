@@ -75,6 +75,7 @@ services:
         - "traefik.http.middlewares.wordpress-https-redirect.redirectscheme.permanent=true"
         # Service
         - "traefik.http.services.wordpress.loadbalancer.server.port=80"
+        - "traefik.docker.network=proxy"
 
   mysql:
     image: mysql:8.0
