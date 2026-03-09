@@ -5,7 +5,8 @@ services:
       - TZ=${TZ:-America/Sao_Paulo}
       - GENERIC_TIMEZONE=${TZ:-America/Sao_Paulo}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
-      - N8N_EDITOR_BASE_URL=https://${SUBDOMAIN_N8N:-n8n}.${DOMAIN}
+      - N8N_HOST=${SUBDOMAIN_N8N:-n8n}.${DOMAIN}
+      - N8N_EDITOR_BASE_URL=https://${SUBDOMAIN_N8N:-n8n}.${DOMAIN}/
       - WEBHOOK_URL=https://${SUBDOMAIN_N8N:-n8n}.${DOMAIN}/
       - N8N_SECURE_COOKIE=false
     volumes:
@@ -34,7 +35,7 @@ services:
         max_attempts: 3
       labels:
         - "traefik.enable=true"
-        # HTTP
+        # HTTP → HTTPS redirect
         - "traefik.http.routers.n8n.entrypoints=http"
         - "traefik.http.routers.n8n.rule=Host(`${SUBDOMAIN_N8N:-n8n}.${DOMAIN}`)"
         - "traefik.http.routers.n8n.middlewares=n8n-https-redirect"
@@ -44,9 +45,12 @@ services:
         - "traefik.http.routers.n8n-secure.tls=true"
         - "traefik.http.routers.n8n-secure.tls.certresolver=cloudflare"
         - "traefik.http.routers.n8n-secure.service=n8n"
+        - "traefik.http.routers.n8n-secure.middlewares=n8n-websocket"
         # Middlewares
         - "traefik.http.middlewares.n8n-https-redirect.redirectscheme.scheme=https"
         - "traefik.http.middlewares.n8n-https-redirect.redirectscheme.permanent=true"
+        - "traefik.http.middlewares.n8n-websocket.headers.customrequestheaders.Upgrade=websocket"
+        - "traefik.http.middlewares.n8n-websocket.headers.customrequestheaders.Connection=Upgrade"
         # Service
         - "traefik.http.services.n8n.loadbalancer.server.port=5678"
         - "traefik.docker.network=proxy"
