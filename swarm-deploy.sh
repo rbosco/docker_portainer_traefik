@@ -165,15 +165,25 @@ case $STACK_CHOICE in
             exit 1
         fi
 
-        # Verificar variáveis n8n
-        N8N_VARS=("N8N_ENCRYPTION_KEY" "SUBDOMAIN_N8N")
-        for var in "${N8N_VARS[@]}"; do
-            if [ -z "${!var}" ]; then
-                print_error "Variável $var não definida no .env"
-                print_info "Configure as variáveis do n8n no arquivo .env"
-                exit 1
-            fi
-        done
+        # Verificar/gerar variáveis n8n
+        if [ -z "$SUBDOMAIN_N8N" ]; then
+            echo -e "${YELLOW}Exemplos: n8n, automacao, workflows${NC}"
+            read -p "Subdomínio do n8n [n8n]: " SUBDOMAIN_N8N
+            SUBDOMAIN_N8N=${SUBDOMAIN_N8N:-n8n}
+            echo "SUBDOMAIN_N8N=$SUBDOMAIN_N8N" >> .env
+            export SUBDOMAIN_N8N
+            print_success "SUBDOMAIN_N8N definido como '$SUBDOMAIN_N8N'"
+        fi
+
+        if [ -z "$N8N_ENCRYPTION_KEY" ]; then
+            print_info "Gerando N8N_ENCRYPTION_KEY automaticamente..."
+            N8N_ENCRYPTION_KEY=$(openssl rand -hex 32 2>/dev/null || cat /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
+            echo "N8N_ENCRYPTION_KEY=$N8N_ENCRYPTION_KEY" >> .env
+            export N8N_ENCRYPTION_KEY
+            print_success "N8N_ENCRYPTION_KEY gerada e salva no .env"
+        else
+            print_success "N8N_ENCRYPTION_KEY já configurada"
+        fi
 
         # Criar diretório n8n
         print_info "Criando diretório de dados do n8n..."
