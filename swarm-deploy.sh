@@ -176,11 +176,18 @@ case $STACK_CHOICE in
         fi
 
         if [ -z "$N8N_ENCRYPTION_KEY" ]; then
+            if [ -f data/n8n/config ]; then
+                print_error "Dados do n8n já existem (data/n8n/config), mas N8N_ENCRYPTION_KEY não está definida."
+                print_info "Restaure N8N_ENCRYPTION_KEY no .env a partir de um backup, ou remova data/n8n para começar do zero (perda de workflows/credenciais)."
+                print_info "Veja TROUBLESHOOTING.md: 'n8n: Mismatching encryption keys'"
+                exit 1
+            fi
             print_info "Gerando N8N_ENCRYPTION_KEY automaticamente..."
             N8N_ENCRYPTION_KEY=$(openssl rand -hex 32 2>/dev/null || cat /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
             echo "N8N_ENCRYPTION_KEY=$N8N_ENCRYPTION_KEY" >> .env
             export N8N_ENCRYPTION_KEY
             print_success "N8N_ENCRYPTION_KEY gerada e salva no .env"
+            print_warning "Faça backup do N8N_ENCRYPTION_KEY e não a altere após o primeiro deploy."
         else
             print_success "N8N_ENCRYPTION_KEY já configurada"
         fi
