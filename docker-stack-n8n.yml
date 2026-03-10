@@ -11,6 +11,7 @@ services:
       - N8N_SECURE_COOKIE=false
       - N8N_TRUST_PROXY_HEADER=true
       - N8N_PROXY_HOPS=1
+      - N8N_PROTOCOL=https
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./data/n8n:/home/node/.n8n
