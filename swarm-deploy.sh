@@ -5,6 +5,10 @@
 
 set -e
 
+# Executar sempre no diretório onde está o script (para .env e stacks)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 # Cores
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -251,8 +255,10 @@ case $DEPLOY_OPTION in
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
         if [ "$STACK_NAME" = "n8n" ]; then
             print_info "Resolvendo variáveis do compose com .env..."
-            if ! docker compose -f "$STACK_FILE" --env-file .env config > /tmp/n8n-stack-resolved.yml; then
+            if ! docker compose -f "$STACK_FILE" --env-file .env config > /tmp/n8n-stack-resolved.yml 2>/tmp/n8n-compose-config.err; then
                 print_error "Falha ao resolver o compose do n8n. Verifique o .env e o arquivo $STACK_FILE."
+                print_info "Saída do docker compose config:"
+                [ -s /tmp/n8n-compose-config.err ] && cat /tmp/n8n-compose-config.err
                 exit 1
             fi
             docker stack deploy -c /tmp/n8n-stack-resolved.yml --with-registry-auth "$STACK_NAME"
