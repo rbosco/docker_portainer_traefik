@@ -109,6 +109,14 @@ else
     print_success "Rede 'proxy' já existe"
 fi
 
+if ! docker network ls | grep -q "n8n_network"; then
+    print_info "Criando rede overlay 'n8n_network' (n8n)..."
+    docker network create --driver overlay --attachable n8n_network
+    print_success "Rede 'n8n_network' criada"
+else
+    print_success "Rede 'n8n_network' já existe"
+fi
+
 # Escolher a stack
 print_header "Escolha a Stack"
 
@@ -243,46 +251,20 @@ case $DEPLOY_OPTION in
             exit 1
         fi
         if [ "$STACK_NAME" = "n8n" ]; then
+            if [ -z "$DOMAIN" ]; then
+                print_error "Variável DOMAIN está vazia! Defina no .env (ex.: DOMAIN=freedomfrompainnow.net)"
+                exit 1
+            fi
             if [ -z "$SUBDOMAIN_N8N" ] || [ -z "$N8N_ENCRYPTION_KEY" ]; then
                 print_error "Variáveis SUBDOMAIN_N8N ou N8N_ENCRYPTION_KEY estão vazias!"
                 print_info "Execute o script novamente para configurá-las"
                 exit 1
             fi
-            print_info "Deploy com: SUBDOMAIN_N8N=$SUBDOMAIN_N8N | DOMAIN=$DOMAIN"
+            print_info "Rota n8n: https://${SUBDOMAIN_N8N}.${DOMAIN}"
         fi
 
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
-        if [ "$STACK_NAME" = "n8n" ]; then
-            N8N_HOST="${SUBDOMAIN_N8N:-n8n}.${DOMAIN}"
-            print_info "Gerando rota do n8n em traefik/dynamic/n8n.yml (Host: $N8N_HOST)..."
-            cat > traefik/dynamic/n8n.yml << EOF
-http:
-  routers:
-    n8n-http:
-      entryPoints: [http]
-      rule: "Host(\`$N8N_HOST\`)"
-      middlewares: [n8n-redirect]
-    n8n-secure:
-      entryPoints: [https]
-      rule: "Host(\`$N8N_HOST\`)"
-      service: n8n-svc
-      tls:
-        certResolver: cloudflare
-  middlewares:
-    n8n-redirect:
-      redirectScheme:
-        scheme: https
-        permanent: true
-  services:
-    n8n-svc:
-      loadBalancer:
-        serversTransport: n8n-slow
-        servers:
-          - url: "http://n8n_n8n:5678"
-        passHostHeader: true
-EOF
-        fi
         docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
 
         print_success "Stack deployed!"

@@ -16,7 +16,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - ./data/n8n:/home/node/.n8n
     networks:
-      - proxy
+      - n8n_network
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz 2>/dev/null || wget -qO- http://localhost:5678/ 2>/dev/null || exit 1"]
       interval: 30s
@@ -36,7 +36,25 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 5
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=n8n_network"
+        # HTTP
+        - "traefik.http.routers.n8n.entrypoints=http"
+        - "traefik.http.routers.n8n.rule=Host(`${SUBDOMAIN_N8N:-n8n}.${DOMAIN}`)"
+        - "traefik.http.routers.n8n.middlewares=n8n-https-redirect"
+        # HTTPS
+        - "traefik.http.routers.n8n-secure.entrypoints=https"
+        - "traefik.http.routers.n8n-secure.rule=Host(`${SUBDOMAIN_N8N:-n8n}.${DOMAIN}`)"
+        - "traefik.http.routers.n8n-secure.tls=true"
+        - "traefik.http.routers.n8n-secure.tls.certresolver=cloudflare"
+        - "traefik.http.routers.n8n-secure.service=n8n"
+        # Middlewares
+        - "traefik.http.middlewares.n8n-https-redirect.redirectscheme.scheme=https"
+        - "traefik.http.middlewares.n8n-https-redirect.redirectscheme.permanent=true"
+        # Service
+        - "traefik.http.services.n8n.loadbalancer.server.port=5678"
 
 networks:
-  proxy:
+  n8n_network:
     external: true

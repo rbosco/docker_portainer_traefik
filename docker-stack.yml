@@ -47,6 +47,7 @@ services:
       - ./data/traefik/acme.json:/acme.json
     networks:
       - proxy
+      - n8n_network
     deploy:
       mode: global
       placement:
@@ -182,3 +183,5 @@ networks:
   proxy:
     driver: overlay
     attachable: true
+  n8n_network:
+    external: true
