@@ -36,27 +36,6 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 5
-      labels:
-        - "traefik.enable=true"
-        # HTTP → HTTPS redirect
-        - "traefik.http.routers.n8nstack-http.entrypoints=http"
-        - "traefik.http.routers.n8nstack-http.rule=Host(`${SUBDOMAIN_N8N:-n8n}.${DOMAIN}`)"
-        - "traefik.http.routers.n8nstack-http.priority=100"
-        - "traefik.http.routers.n8nstack-http.middlewares=n8nstack-https-redirect"
-        # HTTPS
-        - "traefik.http.routers.n8nstack-secure.entrypoints=https"
-        - "traefik.http.routers.n8nstack-secure.rule=Host(`${SUBDOMAIN_N8N:-n8n}.${DOMAIN}`)"
-        - "traefik.http.routers.n8nstack-secure.priority=100"
-        - "traefik.http.routers.n8nstack-secure.tls=true"
-        - "traefik.http.routers.n8nstack-secure.tls.certresolver=cloudflare"
-        - "traefik.http.routers.n8nstack-secure.service=n8nstack-svc"
-        # Middlewares
-        - "traefik.http.middlewares.n8nstack-https-redirect.redirectscheme.scheme=https"
-        - "traefik.http.middlewares.n8nstack-https-redirect.redirectscheme.permanent=true"
-        # Service
-        - "traefik.http.services.n8nstack-svc.loadbalancer.server.port=5678"
-        - "traefik.http.services.n8nstack-svc.loadbalancer.serversTransport=n8n-slow"
-        - "traefik.docker.network=proxy"
 
 networks:
   proxy:

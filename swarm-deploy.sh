@@ -253,6 +253,35 @@ case $DEPLOY_OPTION in
 
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
+        if [ "$STACK_NAME" = "n8n" ]; then
+            N8N_HOST="${SUBDOMAIN_N8N:-n8n}.${DOMAIN}"
+            print_info "Gerando rota do n8n em traefik/dynamic/n8n.yml (Host: $N8N_HOST)..."
+            cat > traefik/dynamic/n8n.yml << EOF
+http:
+  routers:
+    n8n-http:
+      entryPoints: [http]
+      rule: "Host(\`$N8N_HOST\`)"
+      middlewares: [n8n-redirect]
+    n8n-secure:
+      entryPoints: [https]
+      rule: "Host(\`$N8N_HOST\`)"
+      service: n8n-svc
+      tls:
+        certResolver: cloudflare
+  middlewares:
+    n8n-redirect:
+      redirectScheme:
+        scheme: https
+        permanent: true
+  services:
+    n8n-svc:
+      loadBalancer:
+        servers:
+          - url: "http://tasks.n8n_n8n:5678"
+        passHostHeader: true
+EOF
+        fi
         docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
 
         print_success "Stack deployed!"
@@ -349,8 +378,10 @@ case $DEPLOY_OPTION in
             print_info "Aguardando limpeza dos containers..."
             sleep 10
 
-            # Limpar variáveis n8n do .env para forçar nova configuração no próximo deploy
+            # Limpar variáveis e rota dinâmica do n8n
             if [ "$STACK_NAME" = "n8n" ]; then
+                rm -f traefik/dynamic/n8n.yml
+                print_info "Arquivo traefik/dynamic/n8n.yml removido (rota do n8n no Traefik)"
                 sed -i '/^SUBDOMAIN_N8N=/d' .env
                 sed -i '/^N8N_ENCRYPTION_KEY=/d' .env
                 print_info "Variáveis SUBDOMAIN_N8N e N8N_ENCRYPTION_KEY removidas do .env"
