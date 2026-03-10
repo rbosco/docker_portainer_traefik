@@ -250,7 +250,12 @@ case $DEPLOY_OPTION in
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
         if [ "$STACK_NAME" = "n8n" ]; then
-            docker compose -f "$STACK_FILE" --env-file .env config 2>/dev/null | docker stack deploy -c - --with-registry-auth "$STACK_NAME"
+            print_info "Resolvendo variáveis do compose com .env..."
+            if ! docker compose -f "$STACK_FILE" --env-file .env config > /tmp/n8n-stack-resolved.yml; then
+                print_error "Falha ao resolver o compose do n8n. Verifique o .env e o arquivo $STACK_FILE."
+                exit 1
+            fi
+            docker stack deploy -c /tmp/n8n-stack-resolved.yml --with-registry-auth "$STACK_NAME"
         else
             docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
         fi
@@ -267,6 +272,18 @@ case $DEPLOY_OPTION in
         echo
         docker stack services "$STACK_NAME"
         echo
+
+        # Para n8n, verificar se o serviço subiu
+        if [ "$STACK_NAME" = "n8n" ]; then
+            REPLICAS=$(docker service ls -f name=n8n_n8n --format "{{.Replicas}}" 2>/dev/null | head -1)
+            if [ "$REPLICAS" != "1/1" ]; then
+                print_warning "O serviço n8n_n8n não está com 1/1 réplicas em execução (atual: ${REPLICAS:-?})."
+                print_info "Para diagnosticar, execute:"
+                echo -e "  ${YELLOW}docker service ps n8n_n8n --no-trunc${NC}"
+                echo -e "  ${YELLOW}docker service logs n8n_n8n --tail 50${NC}"
+                echo
+            fi
+        fi
 
         # Informações de acesso
         print_header "Informações de Acesso"

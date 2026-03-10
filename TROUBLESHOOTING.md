@@ -118,6 +118,51 @@ curl -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
 
 ---
 
+### n8n: Mismatching encryption keys
+
+**Sintoma:** O container do n8n falha com: `Error: Mismatching encryption keys. The encryption key in the settings file /home/node/.n8n/config does not match the N8N_ENCRYPTION_KEY env var.`
+
+**Causa:** O n8n grava a chave de criptografia em `data/n8n/config` na primeira execução. O container usa a variável `N8N_ENCRYPTION_KEY` do ambiente. Se essa variável for diferente da chave já salva no arquivo (por exemplo, após recriar o `.env` ou gerar uma nova chave no deploy), o n8n recusa iniciar.
+
+**Soluções:**
+
+1. **Restaurar a chave anterior**  
+   Se você tem backup do `.env` (ou da chave do primeiro deploy), defina no `.env` atual:
+   ```bash
+   N8N_ENCRYPTION_KEY=valor_original_da_chave
+   ```
+   Em seguida, faça o deploy novamente. Não há perda de dados.
+
+2. **Começar do zero**  
+   Para usar a chave que está no `.env` agora, apague os dados do n8n (workflows e credenciais serão perdidos):
+   ```bash
+   rm -rf data/n8n/*
+   ```
+   Depois faça o deploy novamente. O n8n criará um novo config com a chave atual.
+
+O script `swarm-deploy.sh` não gera mais uma nova `N8N_ENCRYPTION_KEY` quando já existe `data/n8n/config`; nesse caso exibe erro e orienta a restaurar a chave ou remover `data/n8n`.
+
+---
+
+### n8n: 404 page not found
+
+**Sintoma:** Ao acessar a URL do n8n no browser aparece "404 page not found".
+
+**Causa:** Na maioria das vezes é o Traefik respondendo: nenhum roteador correspondeu ao pedido (o `Host` da requisição não bate com a regra do roteador do n8n).
+
+**Verificações:**
+
+1. **URL correta** – Use exatamente `https://${SUBDOMAIN_N8N}.${DOMAIN}` (ex.: `https://n8n.seudominio.com`), sem path extra e sem typo no subdomínio.
+2. **Deploy com .env carregado** – O deploy da stack n8n deve ser feito com as variáveis do `.env` no ambiente (por exemplo executando `./swarm-deploy.sh`, escolhendo a stack n8n e a opção deploy). Se `DOMAIN` ou `SUBDOMAIN_N8N` estiverem vazios no momento do deploy, a regra do Traefik fica inválida e nenhum pedido coincide.
+3. **Dashboard do Traefik** – Em `https://pr.${DOMAIN}` (ou o subdomínio do Traefik configurado), confira se existe um roteador para o host do n8n e qual é a regra (Host) exibida.
+4. **Inspecionar labels do serviço** – Para ver a regra que foi aplicada no Swarm:
+   ```bash
+   docker service inspect n8n_n8n --format '{{json .Spec.Labels}}'
+   ```
+   Verifique se a regra de Host corresponde ao domínio que você usa no browser.
+
+---
+
 ### 3. Arquivo acme.json com Permissões Incorretas
 
 **Sintoma:** Traefik não consegue salvar certificados, erro nos logs
