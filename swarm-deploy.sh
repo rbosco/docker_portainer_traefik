@@ -277,8 +277,9 @@ http:
   services:
     n8n-svc:
       loadBalancer:
+        serversTransport: n8n-slow
         servers:
-          - url: "http://tasks.n8n_n8n:5678"
+          - url: "http://n8n_n8n:5678"
         passHostHeader: true
 EOF
         fi
@@ -305,6 +306,7 @@ EOF
                 print_info "Para diagnosticar, execute:"
                 echo -e "  ${YELLOW}docker service ps n8n_n8n --no-trunc${NC}"
                 echo -e "  ${YELLOW}docker service logs n8n_n8n --tail 50${NC}"
+                print_info "Se aparecer 502 Bad Gateway ao acessar o n8n, veja TROUBLESHOOTING.md: 'n8n: 502 Bad Gateway'"
                 echo
             fi
         fi
