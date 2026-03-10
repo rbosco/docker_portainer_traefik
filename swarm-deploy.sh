@@ -324,6 +324,7 @@ case $DEPLOY_OPTION in
 
         if ! docker stack ls | grep -q "$STACK_NAME"; then
             print_error "Stack '$STACK_NAME' não encontrada"
+            print_info "Faça o deploy primeiro: execute este script, escolha a stack e depois a opção 1 (Deploy/Atualizar)."
             exit 1
         fi
 
@@ -354,6 +355,7 @@ case $DEPLOY_OPTION in
 
         if ! docker stack ls | grep -q "$STACK_NAME"; then
             print_error "Stack '$STACK_NAME' não encontrada"
+            print_info "Faça o deploy primeiro: execute este script, escolha a stack e depois a opção 1 (Deploy/Atualizar)."
             exit 1
         fi
 
@@ -375,6 +377,7 @@ case $DEPLOY_OPTION in
 
         if ! docker stack ls | grep -q "$STACK_NAME"; then
             print_error "Stack '$STACK_NAME' não encontrada"
+            print_info "Faça o deploy primeiro: execute este script, escolha a stack e depois a opção 1 (Deploy/Atualizar)."
             exit 1
         fi
 
