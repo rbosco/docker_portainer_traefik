@@ -9,16 +9,6 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Detectar comando Compose disponível (plugin V2 ou standalone)
-if docker compose version &>/dev/null; then
-    COMPOSE_CMD="docker compose"
-elif docker-compose version &>/dev/null; then
-    COMPOSE_CMD="docker-compose"
-else
-    echo "Erro: nenhum comando de Compose encontrado. Instale o plugin 'docker compose' (Compose V2) ou o binário 'docker-compose'."
-    exit 1
-fi
-
 # Cores
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -263,18 +253,7 @@ case $DEPLOY_OPTION in
 
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
-        if [ "$STACK_NAME" = "n8n" ]; then
-            print_info "Resolvendo variáveis do compose com .env..."
-            if ! $COMPOSE_CMD -f "$STACK_FILE" --env-file .env config > /tmp/n8n-stack-resolved.yml 2>/tmp/n8n-compose-config.err; then
-                print_error "Falha ao resolver o compose do n8n. Verifique o .env e o arquivo $STACK_FILE."
-                print_info "Saída do docker compose config:"
-                [ -s /tmp/n8n-compose-config.err ] && cat /tmp/n8n-compose-config.err
-                exit 1
-            fi
-            docker stack deploy -c /tmp/n8n-stack-resolved.yml --with-registry-auth "$STACK_NAME"
-        else
-            docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
-        fi
+        docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
 
         print_success "Stack deployed!"
 
