@@ -250,7 +250,7 @@ case $DEPLOY_OPTION in
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
         if [ "$STACK_NAME" = "n8n" ]; then
-            docker compose -f "$STACK_FILE" config 2>/dev/null | docker stack deploy -c - --with-registry-auth "$STACK_NAME"
+            docker compose -f "$STACK_FILE" --env-file .env config 2>/dev/null | docker stack deploy -c - --with-registry-auth "$STACK_NAME"
         else
             docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
         fi
