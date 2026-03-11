@@ -268,7 +268,12 @@ case $DEPLOY_OPTION in
         if [ "$STACK_NAME" = "n8n" ]; then
             N8N_HOST="${SUBDOMAIN_N8N:-n8n}.${DOMAIN}"
             TMP_N8N=$(mktemp)
+            trap 'rm -f "$TMP_N8N"' EXIT
             sed 's|\${SUBDOMAIN_N8N:-n8n}\.\${DOMAIN}|'"$N8N_HOST"'|g' "$STACK_FILE" > "$TMP_N8N"
+            if grep -qF '${SUBDOMAIN_N8N:-n8n}.${DOMAIN}' "$TMP_N8N" 2>/dev/null; then
+                print_error "Falha na substituição do host do n8n; as labels podem estar incorretas."
+                exit 1
+            fi
             docker stack deploy -c "$TMP_N8N" --with-registry-auth "$STACK_NAME"
             rm -f "$TMP_N8N"
         else
@@ -291,7 +296,7 @@ case $DEPLOY_OPTION in
         # Para n8n, verificar se o serviço subiu
         if [ "$STACK_NAME" = "n8n" ]; then
             print_info "Regra Traefik aplicada: Host(\`${N8N_HOST}\`)"
-            print_info "Se aparecer 404, confira no dashboard do Traefik ou: docker service inspect n8n_n8n --format '{{json .Spec.Labels}}'"
+            print_info "Se aparecer 404, veja TROUBLESHOOTING.md: 'n8n: 404 page not found'; ou confira no dashboard do Traefik / docker service inspect n8n_n8n --format '{{json .Spec.Labels}}'"
             REPLICAS=$(docker service ls -f name=n8n_n8n --format "{{.Replicas}}" 2>/dev/null | head -1)
             if [ "$REPLICAS" != "1/1" ]; then
                 print_warning "O serviço n8n_n8n não está com 1/1 réplicas em execução (atual: ${REPLICAS:-?})."

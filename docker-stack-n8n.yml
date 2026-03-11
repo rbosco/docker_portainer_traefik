@@ -47,10 +47,12 @@ services:
         # HTTP
         - "traefik.http.routers.n8n.entrypoints=http"
         - "traefik.http.routers.n8n.rule=Host(`${SUBDOMAIN_N8N:-n8n}.${DOMAIN}`)"
+        - "traefik.http.routers.n8n.priority=100"
         - "traefik.http.routers.n8n.middlewares=n8n-https-redirect"
         # HTTPS
         - "traefik.http.routers.n8n-secure.entrypoints=https"
         - "traefik.http.routers.n8n-secure.rule=Host(`${SUBDOMAIN_N8N:-n8n}.${DOMAIN}`)"
+        - "traefik.http.routers.n8n-secure.priority=100"
         - "traefik.http.routers.n8n-secure.tls=true"
         - "traefik.http.routers.n8n-secure.tls.certresolver=cloudflare"
         - "traefik.http.routers.n8n-secure.service=n8n"
