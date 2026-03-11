@@ -69,6 +69,7 @@ nano .env
 ```
 .
 ├── docker-compose.yml          # Docker Compose (single node)
+├── docker-compose-n8n.yml      # n8n local (testes com Docker Compose)
 ├── docker-stack.yml            # Docker Swarm Stack (cluster)
 ├── setup.sh                    # Script de instalação automática (Compose)
 ├── swarm-init.sh              # Script de inicialização do Swarm
@@ -112,6 +113,19 @@ Este projeto suporta **dois modos de instalação**:
 # ou
 docker compose up -d          # Manual
 ```
+
+**Testar n8n localmente (Docker Compose):**
+```bash
+# Rede proxy (uma vez, se não existir)
+docker network create proxy 2>/dev/null || true
+
+# Subir n8n (acesso em http://localhost:5678)
+docker compose -f docker-compose-n8n.yml up -d
+
+# Com Traefik no ar: subir a base primeiro, depois n8n (também acessível pelo subdomínio)
+docker compose up -d && docker compose -f docker-compose-n8n.yml up -d
+```
+Use `.env` com `SUBDOMAIN_N8N` e `N8N_ENCRYPTION_KEY`; para teste rápido sem `.env`, o compose usa valores padrão.
 
 ### 🐝 Docker Swarm (Recomendado para produção)
 

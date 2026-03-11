@@ -9,6 +9,9 @@ services:
       - --providers.file.directory=/dynamic
       - --providers.file.watch=true
       - --entrypoints.http.address=:80
+      - --entrypoints.http.transport.respondingTimeouts.readTimeout=0
+      - --entrypoints.http.transport.respondingTimeouts.writeTimeout=0
+      - --entrypoints.http.transport.respondingTimeouts.idleTimeout=600
       - --entrypoints.https.address=:443
       - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.cloudflare.acme.storage=/acme.json
@@ -20,8 +23,9 @@ services:
       - --entrypoints.https.transport.respondingTimeouts.readTimeout=0
       - --entrypoints.https.transport.respondingTimeouts.writeTimeout=0
       - --entrypoints.https.transport.respondingTimeouts.idleTimeout=600
-      - --serversTransport.forwardingTimeouts.dialTimeout=120
+      - --serversTransport.forwardingTimeouts.dialTimeout=300
       - --serversTransport.forwardingTimeouts.responseHeaderTimeout=0
+      - --serversTransport.forwardingTimeouts.idleConnTimeout=90
     ports:
       - target: 80
         published: 80
