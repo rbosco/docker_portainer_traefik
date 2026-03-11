@@ -22,6 +22,7 @@ services:
       - ./data/n8n:/home/node/.n8n
     networks:
       - n8n_network
+      - proxy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz 2>/dev/null || wget -qO- http://localhost:5678/ 2>/dev/null || exit 1"]
       interval: 30s
@@ -43,7 +44,6 @@ services:
         max_attempts: 5
       labels:
         - "traefik.enable=true"
-        - "traefik.docker.network=n8n_network"
         # HTTP
         - "traefik.http.routers.n8n.entrypoints=http"
         - "traefik.http.routers.n8n.rule=Host(`${SUBDOMAIN_N8N:-n8n}.${DOMAIN}`)"
@@ -65,4 +65,6 @@ services:
 
 networks:
   n8n_network:
+    external: true
+  proxy:
     external: true
