@@ -277,11 +277,22 @@ case $DEPLOY_OPTION in
                 print_info "Arquivo residual traefik/dynamic/n8n.yml removido (rotas @file substituídas por labels Docker)"
             fi
             N8N_HOST="${SUBDOMAIN_N8N:-n8n}.${DOMAIN}"
+            N8N_DATA_ABS="$(pwd)/data/n8n"
+            if [ ! -d "$N8N_DATA_ABS" ]; then
+                print_error "Diretório de dados do n8n não existe: $N8N_DATA_ABS (execute o script a partir da raiz do projeto)"
+                exit 1
+            fi
             TMP_N8N=$(mktemp)
             trap 'rm -f "$TMP_N8N"' EXIT
-            sed 's|\${SUBDOMAIN_N8N:-n8n}\.\${DOMAIN}|'"$N8N_HOST"'|g' "$STACK_FILE" > "$TMP_N8N"
+            sed -e 's|\${SUBDOMAIN_N8N:-n8n}\.\${DOMAIN}|'"$N8N_HOST"'|g' \
+                -e 's|\./data/n8n|'"$N8N_DATA_ABS"'|g' \
+                "$STACK_FILE" > "$TMP_N8N"
             if grep -qF '${SUBDOMAIN_N8N:-n8n}.${DOMAIN}' "$TMP_N8N" 2>/dev/null; then
                 print_error "Falha na substituição do host do n8n; as labels podem estar incorretas."
+                exit 1
+            fi
+            if grep -qF './data/n8n' "$TMP_N8N" 2>/dev/null; then
+                print_error "Falha na substituição do volume do n8n (./data/n8n -> $N8N_DATA_ABS)"
                 exit 1
             fi
             docker stack deploy -c "$TMP_N8N" --with-registry-auth "$STACK_NAME"
