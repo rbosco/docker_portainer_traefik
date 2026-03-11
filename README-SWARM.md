@@ -173,6 +173,42 @@ chmod +x swarm-deploy.sh
 3. **Ver status**: Mostra status dos serviços
 4. **Ver logs**: Exibe logs de um serviço específico
 
+### Rodar n8n no Swarm e corrigir 404
+
+O 404 ocorre quando o Traefik não encontra roteador para o host da requisição. A rota do n8n vem das **labels** do serviço; o host deve ser o mesmo do `.env`. Siga esta ordem:
+
+**1. Pré-requisitos**
+
+- Swarm ativo: `docker info | grep -i swarm` deve mostrar "Swarm: active".
+- Executar no diretório do repositório: `./swarm-deploy.sh`.
+- `.env` com:
+  - `DOMAIN=seudominio.com` (sem www, sem barra no fim)
+  - `SUBDOMAIN_N8N=n8n`
+  - `N8N_ENCRYPTION_KEY` definida (o script gera na primeira vez se não existir `data/n8n/config`).
+
+**2. Redes**
+
+- O script cria **proxy** e **n8n_network** ao rodar. Se o Traefik foi deployado antes de existir `n8n_network`, faça um redeploy da stack traefik para ele entrar na rede do n8n.
+
+**3. Ordem de deploy**
+
+1. Stack **traefik** primeiro: `./swarm-deploy.sh` → opção **1** → opção **1**.
+2. Stack **n8n** sempre pelo script: `./swarm-deploy.sh` → opção **3** (n8n) → opção **1** (Deploy/Atualizar).
+
+Não use `docker stack deploy -c docker-stack-n8n.yml n8n` manualmente; o script substitui o host no YAML para as labels ficarem corretas.
+
+**4. Verificações**
+
+- `docker service ls` → `n8n_n8n` em **1/1**.
+- Acesse **exatamente** `https://n8n.seudominio.com` (o host do `.env`).
+- DNS: registro A para o subdomínio (ex.: n8n) apontando para o IP do servidor.
+
+**5. Se o 404 continuar**
+
+- Conferir regra: `docker service inspect n8n_n8n --format '{{json .Spec.Labels}}'` → as labels `traefik.http.routers.n8n-secure.rule` e `traefik.http.routers.n8n.rule` devem ter `Host(\`n8n.seudominio.com\`)`. Se estiver vazio ou `Host(\`n8n.\`)`, refaça o deploy pelo script com o `.env` correto.
+- Dashboard Traefik: `https://pr.seudominio.com` → verificar se existe roteador para o host do n8n.
+- Checklist completo: ver [TROUBLESHOOTING.md](TROUBLESHOOTING.md), seção "n8n: 404 page not found".
+
 ## 🏗️ Arquitetura do Cluster
 
 ### Cluster Mínimo (Produção)

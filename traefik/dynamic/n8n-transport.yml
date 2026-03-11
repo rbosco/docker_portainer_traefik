@@ -1,6 +1,0 @@
-http:
-  serversTransports:
-    n8n-slow:
-      forwardingTimeouts:
-        dialTimeout: "300s"
-        responseHeaderTimeout: "0s"

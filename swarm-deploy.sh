@@ -114,21 +114,12 @@ else
     print_success "Rede 'proxy' já existe"
 fi
 
-if ! docker network ls | grep -q "n8n_network"; then
-    print_info "Criando rede overlay 'n8n_network' (n8n)..."
-    docker network create --driver overlay --attachable n8n_network
-    print_success "Rede 'n8n_network' criada"
-else
-    print_success "Rede 'n8n_network' já existe"
-fi
-
 # Escolher a stack
 print_header "Escolha a Stack"
 
 echo -e "${YELLOW}Qual stack deseja gerenciar?${NC}"
 echo "1) Traefik + Portainer (Infraestrutura)"
 echo "2) WordPress"
-echo "3) n8n (Automação de Workflows)"
 echo
 read -p "Stack [1]: " STACK_CHOICE
 STACK_CHOICE=${STACK_CHOICE:-1}
@@ -170,51 +161,6 @@ case $STACK_CHOICE in
         mkdir -p backups/wordpress/files
         print_success "Diretórios criados"
         ;;
-    3)
-        STACK_NAME="n8n"
-        STACK_FILE="docker-stack-n8n.yml"
-        STACK_DESCRIPTION="n8n"
-
-        # Verificar se a stack traefik está rodando
-        if ! docker stack ls | grep -q "traefik"; then
-            print_error "A stack Traefik precisa estar rodando antes do n8n"
-            print_info "Execute primeiro o deploy do Traefik (opção 1)"
-            exit 1
-        fi
-
-        # Verificar/gerar variáveis n8n
-        if [ -z "$SUBDOMAIN_N8N" ]; then
-            echo -e "${YELLOW}Exemplos: n8n, automacao, workflows${NC}"
-            read -p "Subdomínio do n8n [n8n]: " SUBDOMAIN_N8N
-            SUBDOMAIN_N8N=${SUBDOMAIN_N8N:-n8n}
-            echo "SUBDOMAIN_N8N=$SUBDOMAIN_N8N" >> .env
-            export SUBDOMAIN_N8N
-            print_success "SUBDOMAIN_N8N definido como '$SUBDOMAIN_N8N'"
-        fi
-
-        if [ -z "$N8N_ENCRYPTION_KEY" ]; then
-            if [ -f data/n8n/config ]; then
-                print_error "Dados do n8n já existem (data/n8n/config), mas N8N_ENCRYPTION_KEY não está definida."
-                print_info "Restaure N8N_ENCRYPTION_KEY no .env a partir de um backup, ou remova data/n8n para começar do zero (perda de workflows/credenciais)."
-                print_info "Veja TROUBLESHOOTING.md: 'n8n: Mismatching encryption keys'"
-                exit 1
-            fi
-            print_info "Gerando N8N_ENCRYPTION_KEY automaticamente..."
-            N8N_ENCRYPTION_KEY=$(openssl rand -hex 32 2>/dev/null || cat /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
-            echo "N8N_ENCRYPTION_KEY=$N8N_ENCRYPTION_KEY" >> .env
-            export N8N_ENCRYPTION_KEY
-            print_success "N8N_ENCRYPTION_KEY gerada e salva no .env"
-            print_warning "Faça backup do N8N_ENCRYPTION_KEY e não a altere após o primeiro deploy."
-        else
-            print_success "N8N_ENCRYPTION_KEY já configurada"
-        fi
-
-        # Criar diretório n8n com permissões corretas (n8n roda como uid 1000)
-        print_info "Criando diretório de dados do n8n..."
-        mkdir -p data/n8n
-        chown -R 1000:1000 data/n8n
-        print_success "Diretório criado com permissões corretas (uid 1000)"
-        ;;
     *)
         print_error "Opção inválida"
         exit 1
@@ -255,51 +201,10 @@ case $DEPLOY_OPTION in
             print_error "Variável DOMAIN está vazia! Verifique o arquivo .env"
             exit 1
         fi
-        if [ "$STACK_NAME" = "n8n" ]; then
-            if [ -z "$DOMAIN" ]; then
-                print_error "Variável DOMAIN está vazia! Defina no .env (ex.: DOMAIN=freedomfrompainnow.net)"
-                exit 1
-            fi
-            if [ -z "$SUBDOMAIN_N8N" ] || [ -z "$N8N_ENCRYPTION_KEY" ]; then
-                print_error "Variáveis SUBDOMAIN_N8N ou N8N_ENCRYPTION_KEY estão vazias!"
-                print_info "Execute o script novamente para configurá-las"
-                exit 1
-            fi
-            print_info "Rota n8n: https://${SUBDOMAIN_N8N}.${DOMAIN}"
-        fi
 
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
-        if [ "$STACK_NAME" = "n8n" ]; then
-            # Remover arquivo residual do file provider (versão antiga do script gerava este arquivo)
-            if [ -f traefik/dynamic/n8n.yml ]; then
-                rm -f traefik/dynamic/n8n.yml
-                print_info "Arquivo residual traefik/dynamic/n8n.yml removido (rotas @file substituídas por labels Docker)"
-            fi
-            N8N_HOST="${SUBDOMAIN_N8N:-n8n}.${DOMAIN}"
-            N8N_DATA_ABS="$(pwd)/data/n8n"
-            if [ ! -d "$N8N_DATA_ABS" ]; then
-                print_error "Diretório de dados do n8n não existe: $N8N_DATA_ABS (execute o script a partir da raiz do projeto)"
-                exit 1
-            fi
-            TMP_N8N=$(mktemp)
-            trap 'rm -f "$TMP_N8N"' EXIT
-            sed -e 's|\${SUBDOMAIN_N8N:-n8n}\.\${DOMAIN}|'"$N8N_HOST"'|g' \
-                -e 's|\./data/n8n|'"$N8N_DATA_ABS"'|g' \
-                "$STACK_FILE" > "$TMP_N8N"
-            if grep -qF '${SUBDOMAIN_N8N:-n8n}.${DOMAIN}' "$TMP_N8N" 2>/dev/null; then
-                print_error "Falha na substituição do host do n8n; as labels podem estar incorretas."
-                exit 1
-            fi
-            if grep -qF './data/n8n' "$TMP_N8N" 2>/dev/null; then
-                print_error "Falha na substituição do volume do n8n (./data/n8n -> $N8N_DATA_ABS)"
-                exit 1
-            fi
-            docker stack deploy -c "$TMP_N8N" --with-registry-auth "$STACK_NAME"
-            rm -f "$TMP_N8N"
-        else
-            docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
-        fi
+        docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
 
         print_success "Stack deployed!"
 
@@ -313,21 +218,6 @@ case $DEPLOY_OPTION in
         echo
         docker stack services "$STACK_NAME"
         echo
-
-        # Para n8n, verificar se o serviço subiu
-        if [ "$STACK_NAME" = "n8n" ]; then
-            print_info "Regra Traefik aplicada: Host(\`${N8N_HOST}\`)"
-            print_info "Se aparecer 404, veja TROUBLESHOOTING.md: 'n8n: 404 page not found'; ou confira no dashboard do Traefik / docker service inspect n8n_n8n --format '{{json .Spec.Labels}}'"
-            REPLICAS=$(docker service ls -f name=n8n_n8n --format "{{.Replicas}}" 2>/dev/null | head -1)
-            if [ "$REPLICAS" != "1/1" ]; then
-                print_warning "O serviço n8n_n8n não está com 1/1 réplicas em execução (atual: ${REPLICAS:-?})."
-                print_info "Para diagnosticar, execute:"
-                echo -e "  ${YELLOW}docker service ps n8n_n8n --no-trunc${NC}"
-                echo -e "  ${YELLOW}docker service logs n8n_n8n --tail 50${NC}"
-                print_info "Se aparecer 502 Bad Gateway ao acessar o n8n, veja TROUBLESHOOTING.md: 'n8n: 502 Bad Gateway'"
-                echo
-            fi
-        fi
 
         # Informações de acesso
         print_header "Informações de Acesso"
@@ -349,13 +239,6 @@ case $DEPLOY_OPTION in
             print_warning "Certifique-se de que os DNS estão configurados:"
             echo -e "  ${YELLOW}pr.${DOMAIN}${NC} → IP do servidor"
             echo -e "  ${YELLOW}painel.${DOMAIN}${NC} → IP do servidor"
-        elif [ "$STACK_NAME" = "n8n" ]; then
-            echo -e "${BLUE}n8n (Automação de Workflows):${NC}"
-            echo -e "  URL: ${YELLOW}https://${SUBDOMAIN_N8N}.${DOMAIN}${NC}"
-            echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
-            echo
-            print_warning "Certifique-se de que o DNS está configurado:"
-            echo -e "  ${YELLOW}${SUBDOMAIN_N8N}.${DOMAIN}${NC} → IP do servidor"
         elif [ "$STACK_NAME" = "wordpress" ]; then
             echo -e "${BLUE}WordPress:${NC}"
             echo -e "  URL: ${YELLOW}https://${DOMAIN}${NC}"
@@ -397,16 +280,6 @@ case $DEPLOY_OPTION in
 
             print_info "Aguardando limpeza dos containers..."
             sleep 10
-
-            # Limpar variáveis e rota dinâmica do n8n
-            if [ "$STACK_NAME" = "n8n" ]; then
-                rm -f traefik/dynamic/n8n.yml
-                print_info "Arquivo traefik/dynamic/n8n.yml removido (rota do n8n no Traefik)"
-                sed -i '/^SUBDOMAIN_N8N=/d' .env
-                sed -i '/^N8N_ENCRYPTION_KEY=/d' .env
-                print_info "Variáveis SUBDOMAIN_N8N e N8N_ENCRYPTION_KEY removidas do .env"
-                print_info "No próximo deploy do n8n, você será solicitado a configurá-las novamente"
-            fi
         else
             print_info "Operação cancelada"
         fi
@@ -459,8 +332,6 @@ case $DEPLOY_OPTION in
                 3) SERVICE="agent" ;;
                 *) SERVICE="traefik" ;;
             esac
-        elif [ "$STACK_NAME" = "n8n" ]; then
-            SERVICE="n8n"
         elif [ "$STACK_NAME" = "wordpress" ]; then
             echo -e "${YELLOW}Escolha o serviço:${NC}"
             echo "1) WordPress"
@@ -526,8 +397,6 @@ case $DEPLOY_OPTION in
                 docker volume rm traefik-certificates 2>/dev/null || true
                 docker volume rm traefik-data 2>/dev/null || true
                 docker volume rm portainer-data 2>/dev/null || true
-            elif [ "$STACK_NAME" = "n8n" ]; then
-                docker volume rm n8n_n8n-data 2>/dev/null || true
             elif [ "$STACK_NAME" = "wordpress" ]; then
                 docker volume rm wordpress_wordpress-data 2>/dev/null || true
                 docker volume rm wordpress_mysql-data 2>/dev/null || true
@@ -544,18 +413,6 @@ case $DEPLOY_OPTION in
                     rm -rf data/traefik/* data/portainer/*
                     print_success "Dados locais removidos"
                 fi
-            elif [ "$STACK_NAME" = "n8n" ]; then
-                print_warning "Remover dados locais em ./data/n8n?"
-                read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA
-                if [ "$CONFIRM_DATA" = "SIM" ]; then
-                    rm -rf data/n8n/*
-                    print_success "Dados locais removidos"
-                fi
-                # Limpar variáveis n8n do .env para forçar nova configuração no próximo deploy
-                sed -i '/^SUBDOMAIN_N8N=/d' .env
-                sed -i '/^N8N_ENCRYPTION_KEY=/d' .env
-                print_info "Variáveis SUBDOMAIN_N8N e N8N_ENCRYPTION_KEY removidas do .env"
-                print_info "No próximo deploy do n8n, você será solicitado a configurá-las novamente"
             elif [ "$STACK_NAME" = "wordpress" ]; then
                 print_warning "Remover dados locais em ./data/wordpress e ./backups/wordpress?"
                 read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA

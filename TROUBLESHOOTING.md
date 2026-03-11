@@ -118,48 +118,34 @@ curl -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
 
 ---
 
-### n8n: Mismatching encryption keys
+### Traefik: resetar senha do dashboard
 
-**Sintoma:** O container do n8n falha com: `Error: Mismatching encryption keys. The encryption key in the settings file /home/node/.n8n/config does not match the N8N_ENCRYPTION_KEY env var.`
+**Sintoma:** Não consigo logar no dashboard do Traefik (ex.: `https://pr.seudominio.com`); a senha foi esquecida ou precisa ser alterada.
 
-**Causa:** O n8n grava a chave de criptografia em `data/n8n/config` na primeira execução. O container usa a variável `N8N_ENCRYPTION_KEY` do ambiente. Se essa variável for diferente da chave já salva no arquivo (por exemplo, após recriar o `.env` ou gerar uma nova chave no deploy), o n8n recusa iniciar.
+**Causa:** O dashboard usa HTTP Basic Auth. O usuário e a senha vêm da variável `TRAEFIK_USER` no `.env`, no formato `usuario:hash_htpasswd`. Para alterar a senha é preciso gerar um novo hash, atualizar o `.env` e redeployar a stack Traefik.
 
-**Soluções:**
+**Passos:**
 
-1. **Restaurar a chave anterior**  
-   Se você tem backup do `.env` (ou da chave do primeiro deploy), defina no `.env` atual:
+1. **Gerar o hash da nova senha**  
+   No servidor (ou máquina com `htpasswd`; no Ubuntu: `sudo apt install apache2-utils`), execute (substitua `usuario` e `senha` pelo usuário e senha desejados; use aspas na senha se tiver caracteres especiais como `@`):
    ```bash
-   N8N_ENCRYPTION_KEY=valor_original_da_chave
+   echo $(htpasswd -nb usuario 'senha') | sed -e s/\\$/\\$\\$/g
    ```
-   Em seguida, faça o deploy novamente. Não há perda de dados.
+   Copie a saída inteira (ex.: `usuario:$$apr1$$...$$...`).
 
-2. **Começar do zero**  
-   Para usar a chave que está no `.env` agora, apague os dados do n8n (workflows e credenciais serão perdidos):
+2. **Atualizar o .env**  
+   No diretório do projeto, edite o arquivo `.env` e altere a linha:
+   ```env
+   TRAEFIK_USER=valor_copiado_no_passo_1
+   ```
+   Salve o arquivo.
+
+3. **Redeploy da stack Traefik**  
+   Para o Traefik passar a usar o novo `TRAEFIK_USER`:
    ```bash
-   rm -rf data/n8n/*
+   ./swarm-deploy.sh
    ```
-   Depois faça o deploy novamente. O n8n criará um novo config com a chave atual.
-
-O script `swarm-deploy.sh` não gera mais uma nova `N8N_ENCRYPTION_KEY` quando já existe `data/n8n/config`; nesse caso exibe erro e orienta a restaurar a chave ou remover `data/n8n`.
-
----
-
-### n8n: 404 page not found
-
-**Sintoma:** Ao acessar a URL do n8n no browser aparece "404 page not found".
-
-**Causa:** Na maioria das vezes é o Traefik respondendo: nenhum roteador correspondeu ao pedido (o `Host` da requisição não bate com a regra do roteador do n8n).
-
-**Verificações:**
-
-1. **URL correta** – Use exatamente `https://${SUBDOMAIN_N8N}.${DOMAIN}` (ex.: `https://n8n.seudominio.com`), sem path extra e sem typo no subdomínio.
-2. **Deploy com .env carregado** – O deploy da stack n8n deve ser feito com as variáveis do `.env` no ambiente (por exemplo executando `./swarm-deploy.sh`, escolhendo a stack n8n e a opção deploy). Se `DOMAIN` ou `SUBDOMAIN_N8N` estiverem vazios no momento do deploy, a regra do Traefik fica inválida e nenhum pedido coincide.
-3. **Dashboard do Traefik** – Em `https://pr.${DOMAIN}` (ou o subdomínio do Traefik configurado), confira se existe um roteador para o host do n8n e qual é a regra (Host) exibida.
-4. **Inspecionar labels do serviço** – Para ver a regra que foi aplicada no Swarm:
-   ```bash
-   docker service inspect n8n_n8n --format '{{json .Spec.Labels}}'
-   ```
-   Verifique se a regra de Host corresponde ao domínio que você usa no browser.
+   Escolha a opção **1** (Traefik) e depois **1** (Deploy/Atualizar). Em seguida acesse o dashboard com o novo usuário e senha.
 
 ---
 
@@ -324,6 +310,7 @@ No Cloudflare Dashboard, em DNS Records:
 ## 🔬 Comandos Úteis para Diagnóstico
 
 ### Ver logs do Traefik
+
 
 ```bash
 # Docker Compose
