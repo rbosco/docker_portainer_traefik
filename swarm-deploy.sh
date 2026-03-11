@@ -81,10 +81,13 @@ fi
 
 print_success "Arquivo .env encontrado"
 
-# Carregar variáveis do .env
+# Carregar variáveis do .env preservando caracteres especiais ($$, $, etc.)
 print_info "Carregando variáveis de ambiente do .env..."
-# Usar export com xargs para evitar expansão de variáveis pelo bash
-export $(grep -v '^#' .env | grep -v '^$' | xargs)
+while IFS='=' read -r key value; do
+    [[ "$key" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "$key" ]] && continue
+    export "$key"="$value"
+done < .env
 print_success "Variáveis de ambiente carregadas"
 
 # Verificar variáveis obrigatórias
