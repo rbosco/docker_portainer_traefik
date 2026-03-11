@@ -22,8 +22,6 @@ services:
       - --entrypoints.https.transport.respondingTimeouts.idleTimeout=600
       - --serversTransport.forwardingTimeouts.dialTimeout=120
       - --serversTransport.forwardingTimeouts.responseHeaderTimeout=0
-      - --serversTransport.n8n-slow.forwardingTimeouts.dialTimeout=300
-      - --serversTransport.n8n-slow.forwardingTimeouts.responseHeaderTimeout=0
     ports:
       - target: 80
         published: 80
