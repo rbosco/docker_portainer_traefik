@@ -22,7 +22,7 @@ services:
       - ./data/n8n:/home/node/.n8n
     networks:
       - n8n_network
-      - proxy
+      - traefik_proxy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz 2>/dev/null || wget -qO- http://localhost:5678/ 2>/dev/null || exit 1"]
       interval: 30s
@@ -66,5 +66,5 @@ services:
 networks:
   n8n_network:
     external: true
-  proxy:
+  traefik_proxy:
     external: true
