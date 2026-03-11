@@ -86,6 +86,8 @@ print_info "Carregando variáveis de ambiente do .env..."
 while IFS='=' read -r key value; do
     [[ "$key" =~ ^[[:space:]]*# ]] && continue
     [[ -z "$key" ]] && continue
+    # Converter $$ para $ (convenção Docker Compose no .env)
+    value="${value//\$\$/\$}"
     export "$key"="$value"
 done < .env
 print_success "Variáveis de ambiente carregadas"
@@ -269,6 +271,11 @@ case $DEPLOY_OPTION in
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
         if [ "$STACK_NAME" = "n8n" ]; then
+            # Remover arquivo residual do file provider (versão antiga do script gerava este arquivo)
+            if [ -f traefik/dynamic/n8n.yml ]; then
+                rm -f traefik/dynamic/n8n.yml
+                print_info "Arquivo residual traefik/dynamic/n8n.yml removido (rotas @file substituídas por labels Docker)"
+            fi
             N8N_HOST="${SUBDOMAIN_N8N:-n8n}.${DOMAIN}"
             TMP_N8N=$(mktemp)
             trap 'rm -f "$TMP_N8N"' EXIT
