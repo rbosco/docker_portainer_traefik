@@ -265,7 +265,15 @@ case $DEPLOY_OPTION in
 
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
-        docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
+        if [ "$STACK_NAME" = "n8n" ]; then
+            N8N_HOST="${SUBDOMAIN_N8N:-n8n}.${DOMAIN}"
+            TMP_N8N=$(mktemp)
+            sed 's|\${SUBDOMAIN_N8N:-n8n}\.\${DOMAIN}|'"$N8N_HOST"'|g' "$STACK_FILE" > "$TMP_N8N"
+            docker stack deploy -c "$TMP_N8N" --with-registry-auth "$STACK_NAME"
+            rm -f "$TMP_N8N"
+        else
+            docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
+        fi
 
         print_success "Stack deployed!"
 
@@ -282,6 +290,8 @@ case $DEPLOY_OPTION in
 
         # Para n8n, verificar se o serviço subiu
         if [ "$STACK_NAME" = "n8n" ]; then
+            print_info "Regra Traefik aplicada: Host(\`${N8N_HOST}\`)"
+            print_info "Se aparecer 404, confira no dashboard do Traefik ou: docker service inspect n8n_n8n --format '{{json .Spec.Labels}}'"
             REPLICAS=$(docker service ls -f name=n8n_n8n --format "{{.Replicas}}" 2>/dev/null | head -1)
             if [ "$REPLICAS" != "1/1" ]; then
                 print_warning "O serviço n8n_n8n não está com 1/1 réplicas em execução (atual: ${REPLICAS:-?})."
