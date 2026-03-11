@@ -208,10 +208,6 @@ collect_information() {
         SUBDOMAIN_N8N=${SUBDOMAIN_N8N:-n8n}
     fi
 
-    echo -e "${YELLOW}Exemplos: remotion, video, studio${NC}"
-    read -p "Subdomínio do Remotion [remotion]: " SUBDOMAIN_REMOTION
-    SUBDOMAIN_REMOTION=${SUBDOMAIN_REMOTION:-remotion}
-
     # Cloudflare (apenas para produção)
     if [ "$INSTALL_MODE" = "2" ]; then
         echo
@@ -246,7 +242,6 @@ DOMAIN=$DOMAIN
 # Subdomains configuration
 SUBDOMAIN_TRAEFIK=$SUBDOMAIN_TRAEFIK
 SUBDOMAIN_PORTAINER=$SUBDOMAIN_PORTAINER
-SUBDOMAIN_REMOTION=$SUBDOMAIN_REMOTION
 
 # Timezone
 TZ=$TZ
@@ -284,7 +279,7 @@ prepare_directories() {
     print_header "Preparando Estrutura de Diretórios"
 
     # Criar diretórios se não existirem
-    mkdir -p data/traefik data/portainer data/remotion/output traefik/dynamic remotion/project
+    mkdir -p data/traefik data/portainer traefik/dynamic
     if [ "$INSTALL_N8N" = "true" ]; then
         mkdir -p data/n8n
     fi
@@ -380,7 +375,7 @@ start_services() {
     if [ "$INSTALL_N8N" = "true" ]; then
         docker-compose up -d
     else
-        docker-compose up -d traefik portainer remotion
+        docker-compose up -d traefik portainer
     fi
 
     print_success "Serviços iniciados!"
@@ -434,10 +429,6 @@ show_access_info() {
             echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
             echo
         fi
-        echo -e "${BLUE}Remotion Studio (Renderização de Vídeo):${NC}"
-        echo -e "  Via proxy: ${YELLOW}http://$SUBDOMAIN_REMOTION.$DOMAIN${NC}"
-        echo -e "  ${YELLOW}Coloque seu projeto em: ./remotion/project/${NC}"
-        echo -e "  ${YELLOW}Vídeos renderizados em: ./data/remotion/output/${NC}"
     else
         echo -e "${BLUE}Traefik Dashboard:${NC}"
         echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_TRAEFIK.$DOMAIN${NC}"
@@ -454,10 +445,6 @@ show_access_info() {
             echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
             echo
         fi
-        echo -e "${BLUE}Remotion Studio (Renderização de Vídeo):${NC}"
-        echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_REMOTION.$DOMAIN${NC}"
-        echo -e "  ${YELLOW}Coloque seu projeto em: ./remotion/project/${NC}"
-        echo -e "  ${YELLOW}Vídeos renderizados em: ./data/remotion/output/${NC}"
         echo
         print_warning "Certifique-se de que os registros DNS estão configurados:"
         echo -e "  ${YELLOW}$SUBDOMAIN_TRAEFIK.$DOMAIN${NC} → IP do servidor"
@@ -465,7 +452,6 @@ show_access_info() {
         if [ "$INSTALL_N8N" = "true" ]; then
             echo -e "  ${YELLOW}$SUBDOMAIN_N8N.$DOMAIN${NC} → IP do servidor"
         fi
-        echo -e "  ${YELLOW}$SUBDOMAIN_REMOTION.$DOMAIN${NC} → IP do servidor"
     fi
 
     echo

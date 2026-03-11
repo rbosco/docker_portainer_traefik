@@ -1,6 +1,6 @@
-# Docker Stack: Traefik 2.10.7 + Portainer + Remotion
+# Docker Stack: Traefik 2.10.7 + Portainer
 
-Estrutura completa para gerenciamento de containers Docker usando Traefik como reverse proxy, Portainer como interface de gerenciamento e Remotion para renderização de vídeo programática.
+Estrutura completa para gerenciamento de containers Docker usando Traefik como reverse proxy e Portainer como interface de gerenciamento.
 
 ## ⚠️ Requisitos Importantes
 
@@ -25,7 +25,6 @@ docker version --format '{{.Server.Version}}'
 
 - **Traefik 2.10.7**: Reverse proxy moderno com suporte a Let's Encrypt (compatível com Docker 24.0.7)
 - **Portainer CE**: Interface web para gerenciamento de containers Docker
-- **Remotion Studio**: Renderização de vídeo programática com React (para VSLs e criativos)
 - **Docker Compose**: Orquestração dos serviços
 - **Docker Swarm** (opcional): Suporte completo para clusters e alta disponibilidade
 
@@ -49,7 +48,6 @@ Este projeto inclui **suporte completo para Docker Swarm**!
 **URLs customizadas:**
 - Traefik Dashboard: `https://pr.seudominio.com`
 - Portainer: `https://painel.seudominio.com`
-- Remotion Studio: `https://remotion.seudominio.com`
 
 **Início rápido com Swarm:**
 ```bash
@@ -85,16 +83,10 @@ nano .env
 │   ├── traefik-swarm.yml     # Configuração Traefik (Swarm)
 │   └── dynamic/
 │       └── tls.yml           # Configuração TLS dinâmica
-├── remotion/
-│   ├── Dockerfile            # Imagem do Remotion Studio
-│   ├── entrypoint.sh         # Script de inicialização
-│   └── project/              # Seu projeto Remotion (coloque aqui)
 └── data/                      # Dados persistentes (não versionado)
     ├── traefik/
     │   └── acme.json         # Certificados Let's Encrypt
-    ├── portainer/            # Dados do Portainer
-    └── remotion/
-        └── output/           # Vídeos renderizados pelo Remotion
+    └── portainer/            # Dados do Portainer
 ```
 
 ## 🎯 Modos de Instalação
@@ -247,11 +239,6 @@ docker-compose logs -f
   - Direto: http://localhost:9000
   - Configure o usuário admin no primeiro acesso
 
-- **Remotion Studio (Renderização de Vídeo)**:
-  - Via proxy: http://remotion.localhost
-  - Coloque seu projeto em: `./remotion/project/`
-  - Vídeos renderizados em: `./data/remotion/output/`
-
 **Produção (com domínio configurado):**
 
 - **Traefik Dashboard**: https://pr.seudominio.com
@@ -265,17 +252,10 @@ docker-compose logs -f
   - Visualização de logs e métricas
   - **Swarm:** Gerenciamento completo de nodes
 
-- **Remotion Studio**: https://remotion.seudominio.com
-  - Visualização e edição de composições de vídeo
-  - Preview em tempo real das animações React
-  - Renderização de VSLs e criativos
-  - Saída de vídeos em `./data/remotion/output/`
-
 **Configuração DNS necessária:**
 ```
 A    pr        SEU_IP_SERVIDOR
 A    painel    SEU_IP_SERVIDOR
-A    remotion  SEU_IP_SERVIDOR
 
 # Ou com wildcard:
 A    *         SEU_IP_SERVIDOR
@@ -291,7 +271,6 @@ Você pode customizar os subdomínios dos serviços editando o arquivo `.env`:
 # Subdomínios padrão
 SUBDOMAIN_TRAEFIK=pr
 SUBDOMAIN_PORTAINER=painel
-SUBDOMAIN_REMOTION=remotion
 ```
 
 **Exemplos de customização:**
@@ -300,7 +279,6 @@ SUBDOMAIN_REMOTION=remotion
 # Usar subdomínios tradicionais
 SUBDOMAIN_TRAEFIK=traefik
 SUBDOMAIN_PORTAINER=portainer
-SUBDOMAIN_REMOTION=studio
 
 # Usar nomes personalizados
 SUBDOMAIN_TRAEFIK=dashboard
@@ -581,45 +559,6 @@ docker stats
 
 # Ver eventos em tempo real
 docker events --filter type=service
-```
-
-## 🎬 Remotion: Renderização de VSL e Criativos
-
-Esta stack inclui Remotion como motor de renderização de vídeo programática (VSLs e criativos). Você pode orquestrar renderizações via scripts, cron ou ferramentas externas.
-
-### Configurar Projeto Remotion
-
-1. Coloque seu projeto Remotion em `./remotion/project/`:
-```bash
-cd remotion/project
-npx create-video@latest .   # ou copie seu projeto existente
-```
-
-2. O container instala as dependências automaticamente na inicialização.
-
-3. Acesse o Remotion Studio para preview das composições:
-```
-https://remotion.seudominio.com
-```
-
-### Renderizar vídeo
-
-Execute a renderização Remotion via Docker:
-
-```bash
-docker exec remotion npx remotion render \
-  src/index.ts MinhaComposicao \
-  /app/out/video.mp4 \
-  --props='{"titulo":"...", "texto":"..."}'
-```
-
-Os vídeos ficam em `./data/remotion/output/` no servidor.
-
-### Backup dos dados
-
-```bash
-# Backup dos vídeos renderizados
-tar -czf remotion-output-$(date +%Y%m%d).tar.gz data/remotion/output/
 ```
 
 ## 🛡️ Segurança
