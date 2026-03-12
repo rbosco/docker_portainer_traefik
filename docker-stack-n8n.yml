@@ -1,14 +1,43 @@
-# Stack n8n para Docker Swarm
+# Stack n8n para Docker Swarm (com PostgreSQL)
 # Requer: stack Traefik rodando e rede proxy existente.
-# Configure no .env: DOMAIN, SUBDOMAIN_N8N, N8N_ENCRYPTION_KEY, N8N_PROTOCOL.
+# Configure no .env: DOMAIN, SUBDOMAIN_N8N, N8N_ENCRYPTION_KEY, N8N_PROTOCOL, N8N_DB_*.
 #
 # Notas:
 # - "Python 3 is missing" no log é inofensivo com N8N_PYTHON_ENABLED=false (não usa nós Python).
 # - Reinícios (SIGTERM): imagem fixa 2.11.3, memória reservada e stop_grace_period reduzem
 #   substituições indesejadas. Para ver quem envia SIGTERM: no node manager,
 #   docker events --filter service=n8n_n8n  (deixe rodando e aguarde o próximo evento).
+# - O volume n8n_data continua sendo usado para encryption key, logs e assets (recomendado manter).
+# - Se você já usava n8n com SQLite: o primeiro deploy com Postgres cria um banco vazio.
+#   Para manter dados antigos, exporte workflows/credenciais antes ou consulte a doc n8n de migração.
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=${N8N_DB_USER:-n8n}
+      - POSTGRES_PASSWORD=${N8N_DB_PASSWORD}
+      - POSTGRES_DB=${N8N_DB_NAME:-n8n}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - n8n_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        reservations:
+          memory: 256M
+        limits:
+          memory: 512M
+
   n8n:
     image: docker.n8n.io/n8nio/n8n:2.11.3
     environment:
@@ -22,12 +51,20 @@ services:
       - NODE_ENV=production
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
       - N8N_PYTHON_ENABLED=false
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${N8N_DB_NAME:-n8n}
+      - DB_POSTGRESDB_USER=${N8N_DB_USER:-n8n}
+      - DB_POSTGRESDB_PASSWORD=${N8N_DB_PASSWORD}
+      - DB_POSTGRESDB_SCHEMA=public
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - n8n_data:/home/node/.n8n
     stop_grace_period: 120s
     networks:
       - proxy
+      - n8n_internal
     deploy:
       mode: replicated
       replicas: 1
@@ -68,8 +105,11 @@ services:
 
 volumes:
   n8n_data:
+  postgres_data:
 
 networks:
   proxy:
     external: true
     name: traefik_proxy
+  n8n_internal:
+    driver: overlay

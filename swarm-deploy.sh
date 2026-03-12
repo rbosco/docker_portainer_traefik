@@ -174,12 +174,12 @@ case $STACK_CHOICE in
             exit 1
         fi
 
-        # Verificar variáveis n8n
-        N8N_VARS=("SUBDOMAIN_N8N" "N8N_ENCRYPTION_KEY")
+        # Verificar variáveis n8n (incl. PostgreSQL)
+        N8N_VARS=("SUBDOMAIN_N8N" "N8N_ENCRYPTION_KEY" "N8N_DB_PASSWORD")
         for var in "${N8N_VARS[@]}"; do
             if [ -z "${!var}" ]; then
                 print_error "Variável $var não definida no .env"
-                print_info "Configure SUBDOMAIN_N8N e N8N_ENCRYPTION_KEY no arquivo .env"
+                print_info "Configure SUBDOMAIN_N8N, N8N_ENCRYPTION_KEY e N8N_DB_* (PostgreSQL) no arquivo .env"
                 exit 1
             fi
         done
@@ -405,7 +405,7 @@ case $DEPLOY_OPTION in
         if [ "$STACK_NAME" = "traefik" ]; then
             echo "  - Remover a rede 'proxy'"
         elif [ "$STACK_NAME" = "n8n" ]; then
-            echo "  - Remover o volume n8n_n8n_data (workflows e configurações)"
+            echo "  - Remover os volumes n8n_n8n_data e n8n_postgres_data (workflows, config e banco)"
         fi
         echo "  ${RED}TODOS OS DADOS SERÃO PERDIDOS!${NC}"
         echo
@@ -442,6 +442,7 @@ case $DEPLOY_OPTION in
                 docker volume rm wordpress_redis-data 2>/dev/null || true
             elif [ "$STACK_NAME" = "n8n" ]; then
                 docker volume rm n8n_n8n_data 2>/dev/null || true
+                docker volume rm n8n_postgres_data 2>/dev/null || true
             fi
 
             print_success "Volumes antigos limpos (se existiam)"
