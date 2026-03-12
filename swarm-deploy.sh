@@ -174,29 +174,12 @@ case $STACK_CHOICE in
             exit 1
         fi
 
-        # Gerar N8N_DB_* e adicionar ao .env se não existirem (PostgreSQL)
-        if [ -z "${N8N_DB_PASSWORD}" ]; then
-            print_info "N8N_DB_PASSWORD não definida. Gerando e adicionando ao .env..."
-            N8N_DB_NAME=${N8N_DB_NAME:-n8n}
-            N8N_DB_USER=${N8N_DB_USER:-n8n}
-            N8N_DB_PASSWORD=$(openssl rand -base64 24 2>/dev/null || cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 32)
-            cat >> .env << EOF
-
-# n8n PostgreSQL (gerado pelo swarm-deploy.sh)
-N8N_DB_NAME=$N8N_DB_NAME
-N8N_DB_USER=$N8N_DB_USER
-N8N_DB_PASSWORD=$N8N_DB_PASSWORD
-EOF
-            export N8N_DB_NAME N8N_DB_USER N8N_DB_PASSWORD
-            print_success "Variáveis N8N_DB_* adicionadas ao .env"
-        fi
-
         # Verificar variáveis n8n obrigatórias
-        N8N_VARS=("SUBDOMAIN_N8N" "N8N_ENCRYPTION_KEY" "N8N_DB_PASSWORD")
+        N8N_VARS=("SUBDOMAIN_N8N" "N8N_ENCRYPTION_KEY")
         for var in "${N8N_VARS[@]}"; do
             if [ -z "${!var}" ]; then
                 print_error "Variável $var não definida no .env"
-                print_info "Configure SUBDOMAIN_N8N, N8N_ENCRYPTION_KEY e N8N_DB_* (PostgreSQL) no arquivo .env"
+                print_info "Configure SUBDOMAIN_N8N e N8N_ENCRYPTION_KEY no arquivo .env"
                 exit 1
             fi
         done
@@ -422,7 +405,7 @@ case $DEPLOY_OPTION in
         if [ "$STACK_NAME" = "traefik" ]; then
             echo "  - Remover a rede 'proxy'"
         elif [ "$STACK_NAME" = "n8n" ]; then
-            echo "  - Remover os volumes n8n_n8n_data e n8n_postgres_data (workflows, config e banco)"
+            echo "  - Remover o volume n8n_n8n_data (workflows e configurações)"
         fi
         echo "  ${RED}TODOS OS DADOS SERÃO PERDIDOS!${NC}"
         echo
@@ -459,7 +442,6 @@ case $DEPLOY_OPTION in
                 docker volume rm wordpress_redis-data 2>/dev/null || true
             elif [ "$STACK_NAME" = "n8n" ]; then
                 docker volume rm n8n_n8n_data 2>/dev/null || true
-                docker volume rm n8n_postgres_data 2>/dev/null || true
             fi
 
             print_success "Volumes antigos limpos (se existiam)"
@@ -514,7 +496,6 @@ print_info "Comandos úteis:"
 echo "  Ver serviços: ${YELLOW}docker stack services $STACK_NAME${NC}"
 if [ "$STACK_NAME" = "n8n" ]; then
     echo "  Logs n8n: ${YELLOW}docker service logs -f ${STACK_NAME}_n8n${NC}"
-    echo "  Logs Postgres: ${YELLOW}docker service logs -f ${STACK_NAME}_postgres${NC}"
 else
     echo "  Ver logs: ${YELLOW}docker service logs -f ${STACK_NAME}_traefik${NC}"
     echo "  Escalar serviço: ${YELLOW}docker service scale ${STACK_NAME}_portainer=2${NC}"
