@@ -68,7 +68,7 @@ services:
         - "traefik.http.routers.wordpress-secure.entrypoints=https"
         - "traefik.http.routers.wordpress-secure.rule=Host(`www.${DOMAIN}`) || Host(`${DOMAIN}`)"
         - "traefik.http.routers.wordpress-secure.tls=true"
-        - "traefik.http.routers.wordpress-secure.tls.certresolver=cloudflare"
+        - "traefik.http.routers.wordpress-secure.tls.certresolver=letsencrypt"
         - "traefik.http.routers.wordpress-secure.service=wordpress"
         # Middlewares
         - "traefik.http.middlewares.wordpress-https-redirect.redirectscheme.scheme=https"

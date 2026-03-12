@@ -99,7 +99,7 @@ services:
         - "traefik.http.routers.n8n-secure.entrypoints=https"
         - "traefik.http.routers.n8n-secure.rule=Host(`${SUBDOMAIN_N8N:-n8n}.${DOMAIN}`)"
         - "traefik.http.routers.n8n-secure.tls=true"
-        - "traefik.http.routers.n8n-secure.tls.certresolver=cloudflare"
+        - "traefik.http.routers.n8n-secure.tls.certresolver=letsencrypt"
         - "traefik.http.routers.n8n-secure.service=n8n"
         # Middlewares
         - "traefik.http.middlewares.n8n-https-redirect.redirectscheme.scheme=https"

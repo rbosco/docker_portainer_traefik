@@ -240,6 +240,11 @@ case $DEPLOY_OPTION in
             print_error "Variável DOMAIN está vazia! Verifique o arquivo .env"
             exit 1
         fi
+        if [ "$STACK_NAME" = "traefik" ] && [ -z "$ACME_EMAIL" ]; then
+            print_error "Variável ACME_EMAIL está vazia! Necessária para Let's Encrypt."
+            print_info "Configure ACME_EMAIL no .env (ex.: ACME_EMAIL=admin@seudominio.com)"
+            exit 1
+        fi
 
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."

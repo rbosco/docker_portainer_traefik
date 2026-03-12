@@ -14,9 +14,6 @@ services:
     environment:
       - TZ=${TZ:-America/Sao_Paulo}
       - DOCKER_API_VERSION=1.43
-      - CLOUDFLARE_EMAIL=${CF_API_EMAIL}
-      - CLOUDFLARE_API_KEY=${CF_API_KEY}
-      - CLOUDFLARE_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -35,7 +32,7 @@ services:
       - "traefik.http.routers.traefik-secure.rule=Host(`${SUBDOMAIN_TRAEFIK:-pr}.${DOMAIN:-localhost}`)"
       - "traefik.http.routers.traefik-secure.middlewares=traefik-auth"
       - "traefik.http.routers.traefik-secure.tls=true"
-      - "traefik.http.routers.traefik-secure.tls.certresolver=cloudflare"
+      - "traefik.http.routers.traefik-secure.tls.certresolver=letsencrypt"
       - "traefik.http.routers.traefik-secure.tls.domains[0].main=${DOMAIN:-localhost}"
       - "traefik.http.routers.traefik-secure.tls.domains[0].sans=*.${DOMAIN:-localhost}"
       - "traefik.http.routers.traefik-secure.service=api@internal"
@@ -61,7 +58,7 @@ services:
       - "traefik.http.routers.portainer-secure.entrypoints=https"
       - "traefik.http.routers.portainer-secure.rule=Host(`${SUBDOMAIN_PORTAINER:-painel}.${DOMAIN:-localhost}`)"
       - "traefik.http.routers.portainer-secure.tls=true"
-      - "traefik.http.routers.portainer-secure.tls.certresolver=cloudflare"
+      - "traefik.http.routers.portainer-secure.tls.certresolver=letsencrypt"
       - "traefik.http.routers.portainer-secure.service=portainer"
       - "traefik.http.services.portainer.loadbalancer.server.port=9000"
       - "traefik.docker.network=proxy"

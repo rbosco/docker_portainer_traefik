@@ -208,26 +208,12 @@ collect_information() {
         SUBDOMAIN_N8N=${SUBDOMAIN_N8N:-n8n}
     fi
 
-    # Cloudflare (apenas para produção)
+    # Let's Encrypt (apenas para produção)
     if [ "$INSTALL_MODE" = "2" ]; then
         echo
-        print_info "Para usar Let's Encrypt com Cloudflare, você precisa:"
-        print_info "- API Email (email da sua conta Cloudflare)"
-        print_info "- API Key ou API Token"
-        echo
-        read -p "Configurar Cloudflare agora? [s/N]: " SETUP_CF
-
-        if [[ "$SETUP_CF" =~ ^[Ss]$ ]]; then
-            read -p "Email Cloudflare: " CF_API_EMAIL
-            read -sp "API Key/Token Cloudflare: " CF_API_KEY
-            echo
-            USE_CLOUDFLARE="true"
-        else
-            print_warning "Você pode configurar Cloudflare depois editando o arquivo .env"
-            CF_API_EMAIL="your-email@example.com"
-            CF_API_KEY="your-cloudflare-api-key"
-            USE_CLOUDFLARE="false"
-        fi
+        print_info "Let's Encrypt (HTTP challenge): porta 80 deve estar acessível."
+        read -p "Email para Let's Encrypt [admin@$DOMAIN]: " ACME_EMAIL
+        ACME_EMAIL=${ACME_EMAIL:-admin@$DOMAIN}
     fi
 }
 
@@ -265,9 +251,8 @@ EOF
     if [ "$INSTALL_MODE" = "2" ]; then
         cat >> .env << EOF
 
-# Cloudflare API (for Let's Encrypt DNS challenge)
-CF_API_EMAIL=$CF_API_EMAIL
-CF_API_KEY=$CF_API_KEY
+# ACME (Let's Encrypt) - HTTP challenge
+ACME_EMAIL=$ACME_EMAIL
 EOF
     fi
 
@@ -329,10 +314,10 @@ log:
 EOF
         print_success "Configuração ajustada para modo desenvolvimento"
     else
-        # Atualizar email no traefik.yml para produção
-        if [ "$USE_CLOUDFLARE" = "true" ]; then
-            sed -i "s/your-email@example.com/$CF_API_EMAIL/g" traefik/traefik.yml
-            print_success "Email configurado no traefik.yml"
+        # Atualizar email no traefik.yml para produção (Let's Encrypt)
+        if [ -n "$ACME_EMAIL" ]; then
+            sed -i "s/your-email@example.com/$ACME_EMAIL/g" traefik/traefik.yml
+            print_success "ACME_EMAIL configurado no traefik.yml"
         fi
     fi
 }
@@ -348,16 +333,6 @@ update_docker_compose() {
         sed -i '/tls.domains/d' docker-compose.yml
 
         print_success "Docker Compose ajustado para desenvolvimento"
-    else
-        # Adicionar variáveis de ambiente Cloudflare se configurado
-        if [ "$USE_CLOUDFLARE" = "true" ]; then
-            # Verificar se já tem as variáveis
-            if ! grep -q "CF_API_EMAIL" docker-compose.yml; then
-                # Adicionar após a linha de TZ no serviço traefik
-                sed -i '/- TZ=/a\      - CF_API_EMAIL=${CF_API_EMAIL}\n      - CF_API_KEY=${CF_API_KEY}' docker-compose.yml
-                print_success "Variáveis Cloudflare adicionadas ao docker-compose.yml"
-            fi
-        fi
     fi
 }
 

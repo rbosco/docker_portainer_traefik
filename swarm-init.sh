@@ -211,7 +211,6 @@ echo "  1. ${YELLOW}Edite o arquivo .env${NC} e configure:"
 echo "     - DOMAIN (seu domínio)"
 echo "     - SUBDOMAIN_TRAEFIK e SUBDOMAIN_PORTAINER (subdomínios)"
 echo "     - ACME_EMAIL (email para Let's Encrypt)"
-echo "     - CF_API_EMAIL e CF_API_KEY (credenciais Cloudflare)"
 echo "     - TRAEFIK_USER (senha do dashboard)"
 echo
 echo "  2. Execute: ${GREEN}./swarm-deploy.sh${NC}"

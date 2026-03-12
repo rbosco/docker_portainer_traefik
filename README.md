@@ -217,7 +217,7 @@ Edite as seguintes variáveis no arquivo `.env`:
 - `DOMAIN`: Seu domínio (ex: example.com)
 - `TZ`: Seu timezone
 - `TRAEFIK_USER`: Credenciais para o dashboard do Traefik
-- `CF_API_EMAIL` e `CF_API_KEY`: Credenciais Cloudflare (se usar Let's Encrypt)
+- `ACME_EMAIL`: E-mail para Let's Encrypt (certificados HTTPS; porta 80 deve estar acessível)
 
 3. **Prepare os arquivos necessários:**
 ```bash
@@ -266,13 +266,22 @@ docker-compose logs -f
   - Visualização de logs e métricas
   - **Swarm:** Gerenciamento completo de nodes
 
-**Configuração DNS necessária:**
-```
-A    pr        SEU_IP_SERVIDOR
-A    painel    SEU_IP_SERVIDOR
+- **n8n** (se instalado): https://n8n.seudominio.com
+  - Automação de workflows
+  - Subdomínio configurável via `SUBDOMAIN_N8N` no `.env`
+  - Stack Swarm usa PostgreSQL; configure `N8N_DB_NAME`, `N8N_DB_USER` e `N8N_DB_PASSWORD` no `.env`
 
-# Ou com wildcard:
-A    *         SEU_IP_SERVIDOR
+**Configuração DNS necessária (produção):**
+
+Aponte os subdomínios para o IP do servidor (ex.: **178.156.200.149**):
+
+```
+A    pr        178.156.200.149   # Traefik Dashboard
+A    painel    178.156.200.149   # Portainer
+A    n8n       178.156.200.149   # n8n (se usar SUBDOMAIN_N8N=n8n)
+
+# Ou com wildcard (todos os subdomínios):
+A    *         178.156.200.149
 ```
 
 ## ⚙️ Configuração
@@ -329,29 +338,13 @@ echo $(htpasswd -nb admin sua_senha) | sed -e s/\\$/\\$\\$/g
 
 Copie o resultado e atualize a variável `TRAEFIK_USER` no arquivo `.env`.
 
-### Let's Encrypt com Cloudflare
+### Let's Encrypt (HTTP challenge)
 
-1. Obtenha suas credenciais Cloudflare:
-   - API Email: seu email da conta Cloudflare
-   - API Key: Global API Key ou API Token com permissões DNS
+Os certificados são obtidos automaticamente pelo Traefik. Basta configurar no `.env`:
 
-2. Atualize o arquivo `traefik/traefik.yml`:
-```yaml
-certificatesResolvers:
-  cloudflare:
-    acme:
-      email: seu-email@example.com  # Atualize aqui
-      storage: acme.json
-      dnsChallenge:
-        provider: cloudflare
-```
+- `ACME_EMAIL`: e-mail para notificações de renovação (ex.: `ACME_EMAIL=admin@seudominio.com`)
 
-3. Adicione as variáveis de ambiente ao docker-compose.yml (seção environment do Traefik):
-```yaml
-environment:
-  - CF_API_EMAIL=${CF_API_EMAIL}
-  - CF_API_KEY=${CF_API_KEY}
-```
+Requisitos: **porta 80** deve estar acessível da internet (o Let's Encrypt valida em `http://seu-dominio/.well-known/acme-challenge/...`). Cada serviço continua redirecionando HTTP → HTTPS via middleware.
 
 ### Adicionar Novos Serviços
 
@@ -368,7 +361,7 @@ services:
       - "traefik.http.routers.meu-app.rule=Host(`app.${DOMAIN}`)"
       - "traefik.http.routers.meu-app.entrypoints=https"
       - "traefik.http.routers.meu-app.tls=true"
-      - "traefik.http.routers.meu-app.tls.certresolver=cloudflare"
+      - "traefik.http.routers.meu-app.tls.certresolver=letsencrypt"
       - "traefik.http.services.meu-app.loadbalancer.server.port=8000"
 
 networks:
@@ -643,12 +636,12 @@ docker compose up -d
 
 ### Certificados Let's Encrypt não são gerados
 
-1. Verifique se as credenciais Cloudflare estão corretas
+1. Confirme `ACME_EMAIL` no `.env` e que a **porta 80** está acessível da internet.
 2. Verifique os logs do Traefik:
 ```bash
 docker-compose logs traefik | grep -i acme
 ```
-3. Certifique-se de que o domínio está apontando para o servidor
+3. Certifique-se de que o domínio (A/CNAME) aponta para o IP do servidor.
 
 ### Dashboard do Traefik não acessível
 
