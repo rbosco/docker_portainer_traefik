@@ -101,9 +101,10 @@ services:
         # Middlewares
         - "traefik.http.middlewares.n8n-https-redirect.redirectscheme.scheme=https"
         - "traefik.http.middlewares.n8n-https-redirect.redirectscheme.permanent=true"
-        # Service (porta do n8n) e rede para o Traefik alcançar o backend
+        # Service (porta do n8n). Rede explícita: n8n tem 2 redes; Traefik usa "proxy".
         - "traefik.http.services.n8n.loadbalancer.server.port=5678"
-        - "traefik.docker.network=traefik_proxy"
+        - "traefik.docker.network=proxy"
+        - "traefik.swarm.network=proxy"
 
 volumes:
   n8n_data:
@@ -112,6 +113,6 @@ volumes:
 networks:
   proxy:
     external: true
-    name: traefik_proxy
+    name: proxy
   n8n_internal:
     driver: overlay

@@ -5,7 +5,7 @@ services:
       - --api.dashboard=true
       - --providers.docker.swarmMode=true
       - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=traefik_proxy
+      - --providers.docker.network=proxy
       - --providers.file.directory=/dynamic
       - --providers.file.watch=true
       - --entrypoints.http.address=:80
@@ -139,5 +139,5 @@ services:
 
 networks:
   proxy:
-    driver: overlay
-    attachable: true
+    external: true
+    name: proxy
