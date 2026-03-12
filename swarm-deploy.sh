@@ -174,7 +174,24 @@ case $STACK_CHOICE in
             exit 1
         fi
 
-        # Verificar variáveis n8n (incl. PostgreSQL)
+        # Gerar N8N_DB_* e adicionar ao .env se não existirem (PostgreSQL)
+        if [ -z "${N8N_DB_PASSWORD}" ]; then
+            print_info "N8N_DB_PASSWORD não definida. Gerando e adicionando ao .env..."
+            N8N_DB_NAME=${N8N_DB_NAME:-n8n}
+            N8N_DB_USER=${N8N_DB_USER:-n8n}
+            N8N_DB_PASSWORD=$(openssl rand -base64 24 2>/dev/null || cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 32)
+            cat >> .env << EOF
+
+# n8n PostgreSQL (gerado pelo swarm-deploy.sh)
+N8N_DB_NAME=$N8N_DB_NAME
+N8N_DB_USER=$N8N_DB_USER
+N8N_DB_PASSWORD=$N8N_DB_PASSWORD
+EOF
+            export N8N_DB_NAME N8N_DB_USER N8N_DB_PASSWORD
+            print_success "Variáveis N8N_DB_* adicionadas ao .env"
+        fi
+
+        # Verificar variáveis n8n obrigatórias
         N8N_VARS=("SUBDOMAIN_N8N" "N8N_ENCRYPTION_KEY" "N8N_DB_PASSWORD")
         for var in "${N8N_VARS[@]}"; do
             if [ -z "${!var}" ]; then
