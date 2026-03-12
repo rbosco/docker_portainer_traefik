@@ -6,6 +6,7 @@ services:
       - --providers.docker.swarmMode=true
       - --providers.docker.exposedbydefault=false
       - --providers.docker.network=proxy
+      - --providers.docker.allowEmptyServices=true
       - --providers.file.directory=/dynamic
       - --providers.file.watch=true
       - --entrypoints.http.address=:80
