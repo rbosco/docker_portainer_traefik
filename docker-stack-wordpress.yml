@@ -13,7 +13,7 @@ services:
       - ./config/php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
     networks:
       - wordpress_internal
-      - traefik_proxy
+      - proxy
     healthcheck:
       test: ["CMD-SHELL", "test -f /var/www/html/wp-config.php || exit 1"]
       interval: 10s
@@ -38,7 +38,7 @@ services:
       - ./config/nginx/wordpress.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - wordpress_internal
-      - traefik_proxy
+      - proxy
     depends_on:
       - wordpress
     healthcheck:
@@ -59,7 +59,8 @@ services:
         max_attempts: 5
       labels:
         - "traefik.enable=true"
-        - "traefik.docker.network=traefik_proxy"
+        - "traefik.docker.network=proxy"
+        - "traefik.swarm.network=proxy"
         # HTTP
         - "traefik.http.routers.wordpress.entrypoints=http"
         - "traefik.http.routers.wordpress.rule=Host(`www.${DOMAIN}`) || Host(`${DOMAIN}`)"
@@ -75,7 +76,6 @@ services:
         - "traefik.http.middlewares.wordpress-https-redirect.redirectscheme.permanent=true"
         # Service
         - "traefik.http.services.wordpress.loadbalancer.server.port=80"
-        - "traefik.docker.network=proxy"
 
   mysql:
     image: mysql:8.0
@@ -165,5 +165,6 @@ networks:
   wordpress_internal:
     driver: overlay
     attachable: true
-  traefik_proxy:
+  proxy:
     external: true
+    name: proxy
