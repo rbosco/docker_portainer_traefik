@@ -25,13 +25,13 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - n8n_data:/home/node/.n8n
+    stop_grace_period: 120s
     networks:
       - proxy
     deploy:
       mode: replicated
       replicas: 1
       endpoint_mode: dnsrr
-      stop_grace_period: 120s
       placement:
         constraints:
           - node.role == manager
