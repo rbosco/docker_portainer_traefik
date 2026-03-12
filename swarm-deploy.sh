@@ -174,12 +174,23 @@ case $STACK_CHOICE in
             exit 1
         fi
 
-        # Verificar variáveis n8n obrigatórias
-        N8N_VARS=("SUBDOMAIN_N8N" "N8N_ENCRYPTION_KEY")
+        # Gerar N8N_DB_PASSWORD se estiver vazio ou placeholder (antes da validação)
+        if [ -z "$N8N_DB_PASSWORD" ] || [ "$N8N_DB_PASSWORD" = "change_this_secure_password" ]; then
+            N8N_DB_PASSWORD=$(openssl rand -base64 24 2>/dev/null || head -c 32 /dev/urandom | base64 2>/dev/null)
+            export N8N_DB_PASSWORD
+            if grep -q "^N8N_DB_PASSWORD=" .env 2>/dev/null; then
+                sed -i.bak "s|^N8N_DB_PASSWORD=.*|N8N_DB_PASSWORD=$N8N_DB_PASSWORD|" .env
+            else
+                echo "N8N_DB_PASSWORD=$N8N_DB_PASSWORD" >> .env
+            fi
+            print_info "N8N_DB_PASSWORD gerada e salva no .env"
+        fi
+        # Verificar variáveis n8n obrigatórias (incl. Postgres)
+        N8N_VARS=("SUBDOMAIN_N8N" "N8N_ENCRYPTION_KEY" "N8N_DB_NAME" "N8N_DB_USER" "N8N_DB_PASSWORD")
         for var in "${N8N_VARS[@]}"; do
             if [ -z "${!var}" ]; then
                 print_error "Variável $var não definida no .env"
-                print_info "Configure SUBDOMAIN_N8N e N8N_ENCRYPTION_KEY no arquivo .env"
+                print_info "Configure SUBDOMAIN_N8N, N8N_ENCRYPTION_KEY e N8N_DB_* no arquivo .env"
                 exit 1
             fi
         done
@@ -228,13 +239,6 @@ case $DEPLOY_OPTION in
         if [ -z "$DOMAIN" ]; then
             print_error "Variável DOMAIN está vazia! Verifique o arquivo .env"
             exit 1
-        fi
-
-        # n8n (SQLite): remover serviço postgres órfão se existir (era da versão com PostgreSQL)
-        if [ "$STACK_NAME" = "n8n" ] && docker service ls -q --filter "name=n8n_postgres" 2>/dev/null | grep -q .; then
-            print_info "Removendo serviço n8n_postgres (stack n8n usa apenas SQLite)..."
-            docker service rm n8n_postgres 2>/dev/null || true
-            sleep 3
         fi
 
         # Deploy da stack
@@ -412,7 +416,7 @@ case $DEPLOY_OPTION in
         if [ "$STACK_NAME" = "traefik" ]; then
             echo "  - Remover a rede 'proxy'"
         elif [ "$STACK_NAME" = "n8n" ]; then
-            echo "  - Remover o volume n8n_n8n_data (workflows e configurações)"
+            echo "  - Remover os volumes n8n_n8n_data e n8n_postgres_data (workflows e banco Postgres)"
         fi
         echo "  ${RED}TODOS OS DADOS SERÃO PERDIDOS!${NC}"
         echo
@@ -448,7 +452,7 @@ case $DEPLOY_OPTION in
                 docker volume rm wordpress_mysql-data 2>/dev/null || true
                 docker volume rm wordpress_redis-data 2>/dev/null || true
             elif [ "$STACK_NAME" = "n8n" ]; then
-                docker volume rm n8n_n8n_data 2>/dev/null || true
+                docker volume rm n8n_n8n_data n8n_postgres_data 2>/dev/null || true
             fi
 
             print_success "Volumes antigos limpos (se existiam)"
