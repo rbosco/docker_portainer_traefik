@@ -1,10 +1,16 @@
 # Stack n8n para Docker Swarm
 # Requer: stack Traefik rodando e rede proxy existente.
 # Configure no .env: DOMAIN, SUBDOMAIN_N8N, N8N_ENCRYPTION_KEY, N8N_PROTOCOL.
+#
+# Notas:
+# - "Python 3 is missing" no log é inofensivo com N8N_PYTHON_ENABLED=false (não usa nós Python).
+# - Reinícios (SIGTERM): imagem fixa 2.11.3, memória reservada e stop_grace_period reduzem
+#   substituições indesejadas. Para ver quem envia SIGTERM: no node manager,
+#   docker events --filter service=n8n_n8n  (deixe rodando e aguarde o próximo evento).
 
 services:
   n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
+    image: docker.n8n.io/n8nio/n8n:2.11.3
     environment:
       - TZ=${TZ:-America/Sao_Paulo}
       - GENERIC_TIMEZONE=${TZ:-America/Sao_Paulo}
@@ -25,16 +31,23 @@ services:
       mode: replicated
       replicas: 1
       endpoint_mode: dnsrr
+      stop_grace_period: 120s
       placement:
         constraints:
           - node.role == manager
       update_config:
         parallelism: 1
-        delay: 10s
+        delay: 30s
+        order: start-first
       restart_policy:
         condition: on-failure
-        delay: 5s
-        max_attempts: 3
+        delay: 10s
+        max_attempts: 5
+      resources:
+        reservations:
+          memory: 512M
+        limits:
+          memory: 1G
       labels:
         - "traefik.enable=true"
         # HTTP → redirect HTTPS
