@@ -40,6 +40,7 @@ services:
 
   n8n:
     image: docker.n8n.io/n8nio/n8n:2.11.3
+    command: ["sh", "-c", "until node -e \"require('net').createConnection(5432,'postgres').on('connect',function(){this.destroy();process.exit(0)}).on('error',function(){process.exit(1)})\"; do sleep 2; done; exec n8n start"]
     environment:
       - TZ=${TZ:-America/Sao_Paulo}
       - GENERIC_TIMEZONE=${TZ:-America/Sao_Paulo}

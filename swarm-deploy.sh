@@ -512,7 +512,12 @@ esac
 echo
 print_info "Comandos úteis:"
 echo "  Ver serviços: ${YELLOW}docker stack services $STACK_NAME${NC}"
-echo "  Ver logs: ${YELLOW}docker service logs -f ${STACK_NAME}_traefik${NC}"
-echo "  Escalar serviço: ${YELLOW}docker service scale ${STACK_NAME}_portainer=2${NC}"
-echo "  Atualizar serviço: ${YELLOW}docker service update ${STACK_NAME}_traefik${NC}"
+if [ "$STACK_NAME" = "n8n" ]; then
+    echo "  Logs n8n: ${YELLOW}docker service logs -f ${STACK_NAME}_n8n${NC}"
+    echo "  Logs Postgres: ${YELLOW}docker service logs -f ${STACK_NAME}_postgres${NC}"
+else
+    echo "  Ver logs: ${YELLOW}docker service logs -f ${STACK_NAME}_traefik${NC}"
+    echo "  Escalar serviço: ${YELLOW}docker service scale ${STACK_NAME}_portainer=2${NC}"
+    echo "  Atualizar serviço: ${YELLOW}docker service update ${STACK_NAME}_traefik${NC}"
+fi
 echo
