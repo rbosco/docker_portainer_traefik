@@ -230,6 +230,13 @@ case $DEPLOY_OPTION in
             exit 1
         fi
 
+        # n8n (SQLite): remover serviço postgres órfão se existir (era da versão com PostgreSQL)
+        if [ "$STACK_NAME" = "n8n" ] && docker service ls -q --filter "name=n8n_postgres" 2>/dev/null | grep -q .; then
+            print_info "Removendo serviço n8n_postgres (stack n8n usa apenas SQLite)..."
+            docker service rm n8n_postgres 2>/dev/null || true
+            sleep 3
+        fi
+
         # Deploy da stack
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
         docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
