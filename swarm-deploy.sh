@@ -174,12 +174,45 @@ case $STACK_CHOICE in
             exit 1
         fi
 
-        # Verificar variáveis WordPress
+        # WordPress: defaults + passwords seguras se faltar (ver .env.example secção WordPress)
+        _wp_upsert_env() {
+            local k="$1" v="$2"
+            export "${k}=${v}"
+            if grep -q "^${k}=" .env 2>/dev/null; then
+                sed -i.bak "s#^${k}=.*#${k}=${v}#" .env
+            else
+                echo "${k}=${v}" >> .env
+            fi
+        }
+        if [ -z "$WORDPRESS_DB_NAME" ]; then
+            _wp_upsert_env "WORDPRESS_DB_NAME" "wordpress"
+            print_info "WORDPRESS_DB_NAME definido (wordpress) e gravado no .env"
+        fi
+        if [ -z "$WORDPRESS_DB_USER" ]; then
+            _wp_upsert_env "WORDPRESS_DB_USER" "wordpress"
+            print_info "WORDPRESS_DB_USER definido (wordpress) e gravado no .env"
+        fi
+        if [ -z "$WORDPRESS_DB_PASSWORD" ] || [ "$WORDPRESS_DB_PASSWORD" = "change_this_secure_password" ]; then
+            WORDPRESS_DB_PASSWORD=$(openssl rand -hex 24 2>/dev/null || head -c 24 /dev/urandom | xxd -p -c 256 2>/dev/null | head -c 48)
+            _wp_upsert_env "WORDPRESS_DB_PASSWORD" "$WORDPRESS_DB_PASSWORD"
+            print_info "WORDPRESS_DB_PASSWORD gerada e salva no .env"
+        fi
+        if [ -z "$WORDPRESS_DB_ROOT_PASSWORD" ] || [ "$WORDPRESS_DB_ROOT_PASSWORD" = "change_this_root_password" ]; then
+            WORDPRESS_DB_ROOT_PASSWORD=$(openssl rand -hex 24 2>/dev/null || head -c 24 /dev/urandom | xxd -p -c 256 2>/dev/null | head -c 48)
+            _wp_upsert_env "WORDPRESS_DB_ROOT_PASSWORD" "$WORDPRESS_DB_ROOT_PASSWORD"
+            print_info "WORDPRESS_DB_ROOT_PASSWORD gerada e salva no .env"
+        fi
         WORDPRESS_VARS=("WORDPRESS_DB_NAME" "WORDPRESS_DB_USER" "WORDPRESS_DB_PASSWORD" "WORDPRESS_DB_ROOT_PASSWORD")
         for var in "${WORDPRESS_VARS[@]}"; do
             if [ -z "${!var}" ]; then
-                print_error "Variável $var não definida no .env"
-                print_info "Configure as variáveis do WordPress no arquivo .env"
+                print_error "Variável $var continua vazia após tentativa de preenchimento"
+                print_info "Copie a secção WordPress de .env.example (linhas ~54–57) para o .env e defina valores reais."
+                echo
+                echo -e "${YELLOW}Exemplo (ajuste as passwords):${NC}"
+                echo "  WORDPRESS_DB_NAME=wordpress"
+                echo "  WORDPRESS_DB_USER=wordpress"
+                echo "  WORDPRESS_DB_PASSWORD=..."
+                echo "  WORDPRESS_DB_ROOT_PASSWORD=..."
                 exit 1
             fi
         done
