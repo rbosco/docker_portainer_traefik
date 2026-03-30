@@ -283,6 +283,13 @@ case $DEPLOY_OPTION in
             print_warning "Certifique-se de que os DNS estão configurados:"
             echo -e "  ${YELLOW}pr.${DOMAIN}${NC} → IP do servidor"
             echo -e "  ${YELLOW}painel.${DOMAIN}${NC} → IP do servidor"
+        elif [ "$STACK_NAME" = "n8n" ]; then
+            echo -e "${BLUE}n8n (Automação de Workflows):${NC}"
+            echo -e "  URL: ${YELLOW}https://${SUBDOMAIN_N8N}.${DOMAIN}${NC}"
+            echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
+            echo
+            print_warning "Certifique-se de que o DNS está configurado:"
+            echo -e "  ${YELLOW}${SUBDOMAIN_N8N}.${DOMAIN}${NC} → IP do servidor"
         elif [ "$STACK_NAME" = "wordpress" ]; then
             echo -e "${BLUE}WordPress:${NC}"
             echo -e "  URL: ${YELLOW}https://${DOMAIN}${NC}"
@@ -383,6 +390,8 @@ case $DEPLOY_OPTION in
                 3) SERVICE="agent" ;;
                 *) SERVICE="traefik" ;;
             esac
+        elif [ "$STACK_NAME" = "n8n" ]; then
+            SERVICE="n8n"
         elif [ "$STACK_NAME" = "wordpress" ]; then
             echo -e "${YELLOW}Escolha o serviço:${NC}"
             echo "1) WordPress"
@@ -452,6 +461,8 @@ case $DEPLOY_OPTION in
                 docker volume rm traefik-certificates 2>/dev/null || true
                 docker volume rm traefik-data 2>/dev/null || true
                 docker volume rm portainer-data 2>/dev/null || true
+            elif [ "$STACK_NAME" = "n8n" ]; then
+                docker volume rm n8n_n8n-data 2>/dev/null || true
             elif [ "$STACK_NAME" = "wordpress" ]; then
                 docker volume rm wordpress_wordpress-data 2>/dev/null || true
                 docker volume rm wordpress_mysql-data 2>/dev/null || true
@@ -468,6 +479,13 @@ case $DEPLOY_OPTION in
                 read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA
                 if [ "$CONFIRM_DATA" = "SIM" ]; then
                     rm -rf data/traefik/* data/portainer/*
+                    print_success "Dados locais removidos"
+                fi
+            elif [ "$STACK_NAME" = "n8n" ]; then
+                print_warning "Remover dados locais em ./data/n8n?"
+                read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA
+                if [ "$CONFIRM_DATA" = "SIM" ]; then
+                    rm -rf data/n8n/*
                     print_success "Dados locais removidos"
                 fi
             elif [ "$STACK_NAME" = "wordpress" ]; then
