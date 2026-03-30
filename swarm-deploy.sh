@@ -38,6 +38,31 @@ print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
 }
 
+# docker-stack*.yml usa rede externa nome exato "proxy" (overlay Swarm).
+# "docker network ls | grep proxy" dá falso positivo (ex.: docker_portainer_traefik_proxy).
+ensure_swarm_proxy_network() {
+    if ! docker network inspect proxy &>/dev/null; then
+        print_info "Criando rede overlay Swarm 'proxy'..."
+        docker network create --driver overlay --attachable proxy
+        print_success "Rede 'proxy' criada"
+        return 0
+    fi
+    local driver scope
+    driver=$(docker network inspect -f '{{.Driver}}' proxy 2>/dev/null)
+    scope=$(docker network inspect -f '{{.Scope}}' proxy 2>/dev/null)
+    if [ "$driver" = "overlay" ] && [ "$scope" = "swarm" ]; then
+        print_success "Rede overlay Swarm 'proxy' OK"
+        return 0
+    fi
+    print_error "Existe uma rede 'proxy', mas não é overlay Swarm (driver=$driver, scope=$scope)."
+    print_info "Comum após ./setup.sh ou docker compose: 'proxy' fica em bridge local."
+    print_info "Pare o compose e remova a rede, depois volte a executar este script:"
+    print_info "  docker compose down"
+    print_info "  docker network rm proxy"
+    print_info "Ou crie manualmente: docker network create --driver overlay --attachable proxy"
+    exit 1
+}
+
 # Banner
 clear
 echo -e "${BLUE}"
@@ -103,16 +128,10 @@ done
 
 print_success "Variáveis de ambiente configuradas"
 
-# Verificar rede overlay
-print_header "Verificando Rede Overlay"
+# Verificar / criar rede overlay Swarm (nome exato: proxy)
+print_header "Verificando Rede Overlay Swarm"
 
-if ! docker network ls | grep -q "proxy"; then
-    print_info "Criando rede overlay 'proxy'..."
-    docker network create --driver overlay --attachable proxy
-    print_success "Rede 'proxy' criada"
-else
-    print_success "Rede 'proxy' já existe"
-fi
+ensure_swarm_proxy_network
 
 # Escolher a stack
 print_header "Escolha a Stack"
