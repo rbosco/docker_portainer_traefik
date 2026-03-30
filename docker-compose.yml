@@ -33,9 +33,8 @@ services:
       - "traefik.http.routers.traefik-secure.middlewares=traefik-auth"
       - "traefik.http.routers.traefik-secure.tls=true"
       - "traefik.http.routers.traefik-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.traefik-secure.tls.domains[0].main=${DOMAIN:-localhost}"
-      - "traefik.http.routers.traefik-secure.tls.domains[0].sans=*.${DOMAIN:-localhost}"
       - "traefik.http.routers.traefik-secure.service=api@internal"
+      - "traefik.docker.network=proxy"
 
   portainer:
     image: portainer/portainer-ce:latest

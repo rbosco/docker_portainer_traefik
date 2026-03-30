@@ -126,7 +126,7 @@ generate_password_hash() {
     if command -v htpasswd &> /dev/null; then
         echo $(htpasswd -nb "$username" "$password" | sed -e s/\\$/\\$\\$/g)
     else
-        print_warning "htpasswd não encontrado, usando senha padrão"
+        echo -e "${YELLOW}⚠${NC} htpasswd não encontrado, usando senha padrão" >&2
         echo "admin:\$\$apr1\$\$8EVjn/nj\$\$GiLUZqcbueTFeD23SuB6x0"
     fi
 }
