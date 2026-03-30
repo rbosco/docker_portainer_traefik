@@ -63,6 +63,18 @@ ensure_swarm_proxy_network() {
     exit 1
 }
 
+# Bind-mounts do docker-stack.yml (Traefik): ficheiro acme.json tem de existir no host antes do deploy Swarm.
+ensure_traefik_stack_host_paths() {
+    mkdir -p data/traefik data/portainer
+    if [ ! -f data/traefik/acme.json ]; then
+        print_info "Criando data/traefik/acme.json (necessário para o volume bind da stack Traefik)..."
+        echo '{}' > data/traefik/acme.json
+        print_success "acme.json criado"
+    fi
+    chmod 600 data/traefik/acme.json
+    print_success "Caminhos locais Traefik/Portainer OK (data/traefik, data/portainer)"
+}
+
 # Banner
 clear
 echo -e "${BLUE}"
@@ -263,6 +275,10 @@ case $DEPLOY_OPTION in
             print_error "Variável ACME_EMAIL está vazia! Necessária para Let's Encrypt."
             print_info "Configure ACME_EMAIL no .env (ex.: ACME_EMAIL=admin@seudominio.com)"
             exit 1
+        fi
+
+        if [ "$STACK_NAME" = "traefik" ]; then
+            ensure_traefik_stack_host_paths
         fi
 
         # Deploy da stack

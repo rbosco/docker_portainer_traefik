@@ -173,10 +173,10 @@ EOL
     mkdir -p data/traefik data/portainer
     print_success "Diretórios criados: data/traefik, data/portainer"
 
-    # Criar acme.json com permissões corretas
+    # Criar acme.json com permissões corretas (JSON vazio; Traefik espera ficheiro JSON válido)
     if [ ! -f data/traefik/acme.json ]; then
         print_info "Criando arquivo acme.json..."
-        touch data/traefik/acme.json
+        echo '{}' > data/traefik/acme.json
         chmod 600 data/traefik/acme.json
         print_success "Arquivo acme.json criado com permissões 600"
     else
