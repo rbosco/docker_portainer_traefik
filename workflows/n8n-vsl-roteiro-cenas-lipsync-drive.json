@@ -1,0 +1,329 @@
+{
+  "name": "VSL – Roteiro → Cenas → Lip sync → Unir → Drive",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerOn": "fileUploaded",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        }
+      },
+      "id": "trigger-drive",
+      "name": "Google Drive Trigger",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "CONFIGURAR_GOOGLE_DRIVE",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "binaryPropertyName": "data"
+      },
+      "id": "drive-download",
+      "name": "Ler arquivo roteiro",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [460, 300],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "CONFIGURAR_GOOGLE_DRIVE",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Converte binário do Drive em texto e faz parse do roteiro JSON.\n// Formato esperado: { nomeProjeto, aspectRatio, quality, cenas: [{ prompt, texto?, duracao, ordem }] }\nconst item = $input.first();\nconst binary = item.binary?.data;\nif (!binary) throw new Error('Nenhum arquivo binário no item');\nconst data = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst text = data.toString('utf8');\nlet roteiro;\ntry {\n  roteiro = JSON.parse(text);\n} catch (e) {\n  throw new Error('Roteiro inválido: deve ser JSON com nomeProjeto, aspectRatio, quality, cenas[]');\n}\nconst cenas = roteiro.cenas || [];\nconst global = {\n  nomeProjeto: roteiro.nomeProjeto || 'vsl',\n  aspectRatio: roteiro.aspectRatio || '9:16',\n  quality: roteiro.quality || '720p'\n};\nconst staticData = $getWorkflowStaticData('global');\nstaticData.nomeProjeto = global.nomeProjeto;\nreturn cenas.map((c, i) => ({ json: { ...c, ordem: c.ordem ?? i, ...global } }));"
+      },
+      "id": "code-parse",
+      "name": "Parse roteiro em cenas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-cenas",
+      "name": "Loop por cena",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.kie.ai/api/v1/runway/generate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prompt\": {{ JSON.stringify($json.prompt) }},\n  \"duration\": {{ $json.duracao || 5 }},\n  \"quality\": {{ JSON.stringify($json.quality || '720p') }},\n  \"aspectRatio\": {{ JSON.stringify($json.aspectRatio || '9:16') }},\n  \"waterMark\": \"\",\n  \"callBackUrl\": \"\"\n}",
+        "options": {}
+      },
+      "id": "kie-generate",
+      "name": "kie.ai – Gerar vídeo cena",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_KIE_AI",
+          "name": "kie.ai API Key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Header: Authorization = Bearer SEU_API_KEY"
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "wait-poll",
+      "name": "Aguardar geração",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.kie.ai/api/v1/runway/record-detail?taskId={{ $json.data?.taskId || $json.taskId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "kie-status",
+      "name": "kie.ai – Status vídeo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_KIE_AI",
+          "name": "kie.ai API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-success",
+              "leftValue": "={{ $json.data?.status || $json.status }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-success",
+      "name": "Status success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fal.ai/models/fal-ai/sync-lipsync/run",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"video_url\": {{ JSON.stringify($json.data?.video_url || $json.video_url) }},\n  \"audio_url\": \"\"\n}",
+        "options": {}
+      },
+      "id": "lipsync",
+      "name": "Lip sync (fal.ai)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 120],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_FAL_AI",
+          "name": "fal.ai API Key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Configurar URL/body conforme API escolhida (fal.ai, Lipsync.studio ou Lipdub)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Saída do loop: um item com video_url (do lip sync ou do kie.ai) para o agrupador\nconst item = $input.first();\nconst j = item.json?.data || item.json || {};\nreturn [{ json: { video_url: j.video_url || j.output?.video_url } }];"
+      },
+      "id": "code-pass",
+      "name": "Guardar ref cena",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop terminou: recebe um item por cena (com video_url). Ordem = ordem de chegada.\nconst items = $input.all();\nconst videoUrls = items.map(i => i.json.video_url).filter(Boolean);\nconst nomeProjeto = $getWorkflowStaticData('global').nomeProjeto || 'vsl';\nreturn [{ json: { videoUrls, nomeProjeto } }];"
+      },
+      "id": "code-concat-list",
+      "name": "Listar videos para concat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "command": "=echo 'Concatenação: configure ffmpeg ou API externa. URLs=' && echo {{ JSON.stringify($json.videoUrls) }}"
+      },
+      "id": "exec-concat",
+      "name": "Concatenacao ffmpeg API",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1340, 400],
+      "notesInFlow": true,
+      "notes": "Substituir por: 1) Execute Command com ffmpeg -f concat, ou 2) HTTP Request para API de concatenação. Entrada: $json.videoUrls e $json.nomeProjeto."
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "name": "={{ $json.nomeProjeto }}-{{ $now.format('yyyy-MM-dd-HHmm') }}.mp4",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "binaryData": true,
+        "binaryPropertyName": "data"
+      },
+      "id": "drive-upload",
+      "name": "Upload video final",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1560, 400],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "CONFIGURAR_GOOGLE_DRIVE",
+          "name": "Google Drive account"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Pasta destino: 05-Videos-Prontos. Requer binário no item (saída do passo de concatenação)."
+    }
+  ],
+  "connections": {
+    "Google Drive Trigger": {
+      "main": [
+        [{ "node": "Ler arquivo roteiro", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ler arquivo roteiro": {
+      "main": [
+        [{ "node": "Parse roteiro em cenas", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse roteiro em cenas": {
+      "main": [
+        [{ "node": "Loop por cena", "type": "main", "index": 0 }]
+      ]
+    },
+    "Loop por cena": {
+      "main": [
+        [{ "node": "kie.ai – Gerar vídeo cena", "type": "main", "index": 0 }],
+        [{ "node": "Listar videos para concat", "type": "main", "index": 0 }]
+      ]
+    },
+    "kie.ai – Gerar vídeo cena": {
+      "main": [
+        [{ "node": "Aguardar geração", "type": "main", "index": 0 }]
+      ]
+    },
+    "Aguardar geração": {
+      "main": [
+        [{ "node": "kie.ai – Status vídeo", "type": "main", "index": 0 }]
+      ]
+    },
+    "kie.ai – Status vídeo": {
+      "main": [
+        [{ "node": "Status success?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lip sync (fal.ai)": {
+      "main": [
+        [{ "node": "Guardar ref cena", "type": "main", "index": 0 }]
+      ]
+    },
+    "Guardar ref cena": {
+      "main": [
+        [{ "node": "Loop por cena", "type": "main", "index": 0 }]
+      ]
+    },
+    "Status success?": {
+      "main": [
+        [{ "node": "Lip sync (fal.ai)", "type": "main", "index": 0 }],
+        [{ "node": "Guardar ref cena", "type": "main", "index": 0 }]
+      ]
+    },
+    "Listar videos para concat": {
+      "main": [
+        [{ "node": "Concatenacao ffmpeg API", "type": "main", "index": 0 }]
+      ]
+    },
+    "Concatenacao ffmpeg API": {
+      "main": [
+        [{ "node": "Upload video final", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {}
+}

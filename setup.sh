@@ -35,6 +35,24 @@ print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
 }
 
+# Docker Compose v1 (docker-compose) ou plugin v2 (docker compose)
+docker_compose() {
+    if command -v docker-compose &> /dev/null; then
+        docker-compose "$@"
+    elif docker compose version &> /dev/null; then
+        docker compose "$@"
+    else
+        print_error "Docker Compose não disponível"
+        return 127
+    fi
+}
+
+if command -v docker-compose &> /dev/null; then
+    COMPOSE_HINT="docker-compose"
+else
+    COMPOSE_HINT="docker compose"
+fi
+
 # Verificar se está rodando como root
 check_root() {
     if [ "$EUID" -eq 0 ]; then
@@ -126,7 +144,7 @@ cleanup_existing() {
 
     if [[ "$CLEANUP" =~ ^[Ss]$ ]]; then
         print_info "Parando e removendo containers..."
-        docker-compose down -v 2>/dev/null || true
+        docker_compose down -v 2>/dev/null || true
 
         print_info "Removendo rede proxy..."
         docker network rm proxy 2>/dev/null || true
@@ -341,16 +359,16 @@ start_services() {
     print_header "Iniciando Serviços"
 
     print_info "Parando containers existentes (se houver)..."
-    docker-compose down 2>/dev/null || true
+    docker_compose down 2>/dev/null || true
 
     print_info "Baixando imagens..."
-    docker-compose pull
+    docker_compose pull
 
     print_info "Iniciando containers..."
     if [ "$INSTALL_N8N" = "true" ]; then
-        docker-compose up -d
+        docker_compose up -d
     else
-        docker-compose up -d traefik portainer
+        docker_compose up -d traefik portainer
     fi
 
     print_success "Serviços iniciados!"
@@ -363,15 +381,15 @@ check_services() {
     sleep 5
 
     echo
-    docker-compose ps
+    docker_compose ps
     echo
 
     # Verificar se os containers estão rodando
-    if docker-compose ps | grep -q "Up"; then
+    if docker_compose ps | grep -q "Up"; then
         print_success "Containers estão rodando"
     else
         print_error "Alguns containers não iniciaram corretamente"
-        print_info "Execute: docker-compose logs"
+        print_info "Execute: ${COMPOSE_HINT} logs"
         return 1
     fi
 }
@@ -431,10 +449,10 @@ show_access_info() {
 
     echo
     echo -e "${BLUE}Comandos Úteis:${NC}"
-    echo -e "  Ver logs: ${YELLOW}docker-compose logs -f${NC}"
-    echo -e "  Parar: ${YELLOW}docker-compose down${NC}"
-    echo -e "  Reiniciar: ${YELLOW}docker-compose restart${NC}"
-    echo -e "  Status: ${YELLOW}docker-compose ps${NC}"
+    echo -e "  Ver logs: ${YELLOW}${COMPOSE_HINT} logs -f${NC}"
+    echo -e "  Parar: ${YELLOW}${COMPOSE_HINT} down${NC}"
+    echo -e "  Reiniciar: ${YELLOW}${COMPOSE_HINT} restart${NC}"
+    echo -e "  Status: ${YELLOW}${COMPOSE_HINT} ps${NC}"
     echo
 }
 
@@ -473,7 +491,7 @@ EOF
     else
         echo
         print_error "Instalação concluída com avisos"
-        print_info "Verifique os logs: docker-compose logs -f"
+        print_info "Verifique os logs: ${COMPOSE_HINT} logs -f"
     fi
 }
 

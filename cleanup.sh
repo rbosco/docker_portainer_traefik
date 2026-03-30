@@ -35,6 +35,18 @@ print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
 }
 
+# Docker Compose v1 (docker-compose) ou plugin v2 (docker compose)
+docker_compose() {
+    if command -v docker-compose &> /dev/null; then
+        docker-compose "$@"
+    elif docker compose version &> /dev/null; then
+        docker compose "$@"
+    else
+        print_error "Docker Compose não disponível"
+        return 127
+    fi
+}
+
 # Banner
 clear
 echo -e "${RED}"
@@ -137,7 +149,7 @@ print_header "Limpando Docker Compose"
 # Parar e remover containers
 if [ -f docker-compose.yml ]; then
     print_info "Parando e removendo containers do Compose..."
-    docker-compose down -v 2>/dev/null && print_success "Containers do Compose removidos" || print_warning "Nenhum container do Compose encontrado"
+    docker_compose down -v 2>/dev/null && print_success "Containers do Compose removidos" || print_warning "Nenhum container do Compose encontrado"
 else
     print_warning "docker-compose.yml não encontrado"
 fi
