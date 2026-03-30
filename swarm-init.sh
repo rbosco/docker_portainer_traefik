@@ -34,6 +34,27 @@ print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
 }
 
+# Overlay Swarm com nome exato "proxy" (docker-stack.yml). Evita falso positivo de "grep proxy".
+ensure_swarm_proxy_network() {
+    if ! docker network inspect proxy &>/dev/null; then
+        docker network create --driver overlay --attachable proxy
+        print_success "Rede overlay 'proxy' criada"
+        return 0
+    fi
+    local driver scope
+    driver=$(docker network inspect -f '{{.Driver}}' proxy 2>/dev/null)
+    scope=$(docker network inspect -f '{{.Scope}}' proxy 2>/dev/null)
+    if [ "$driver" = "overlay" ] && [ "$scope" = "swarm" ]; then
+        print_success "Rede overlay Swarm 'proxy' já existe"
+        return 0
+    fi
+    print_error "Rede 'proxy' existe mas não é overlay Swarm (driver=$driver, scope=$scope)."
+    print_info "Após docker compose, 'proxy' costuma ser bridge. Remova e crie a overlay:"
+    print_info "  docker compose down && docker network rm proxy"
+    print_info "  docker network create --driver overlay --attachable proxy"
+    exit 1
+}
+
 # Banner
 clear
 echo -e "${BLUE}"
@@ -123,15 +144,10 @@ EOL
 
     print_success "Tokens salvos em: swarm-tokens.txt"
 
-    # Criar rede overlay
+    # Criar rede overlay Swarm (nome exato: proxy)
     print_header "Criando Rede Overlay"
 
-    if docker network ls | grep -q "proxy"; then
-        print_warning "Rede 'proxy' já existe"
-    else
-        docker network create --driver overlay --attachable proxy
-        print_success "Rede 'proxy' criada"
-    fi
+    ensure_swarm_proxy_network
 
     # Preparar estrutura de arquivos e diretórios
     print_header "Preparando Estrutura de Dados"
