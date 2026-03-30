@@ -13,6 +13,11 @@ entryPoints:
           permanent: true
   https:
     address: ":443"
+    transport:
+      respondingTimeouts:
+        readTimeout: 0    # sem limite — necessário para workflows longos do n8n
+        writeTimeout: 0   # sem limite
+        idleTimeout: 600  # 10 min para conexões SSE/WebSocket do editor
 
 serversTransport:
   insecureSkipVerify: true
@@ -29,16 +34,12 @@ providers:
     watch: true
 
 certificatesResolvers:
-  cloudflare:
+  letsencrypt:
     acme:
       email: ${ACME_EMAIL:-your-email@example.com}
       storage: /acme.json
-      dnsChallenge:
-        provider: cloudflare
-        resolvers:
-          - "1.1.1.1:53"
-          - "1.0.0.1:53"
-        delayBeforeCheck: 0
+      httpChallenge:
+        entryPoint: http
 
 log:
   level: INFO

@@ -118,6 +118,37 @@ curl -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
 
 ---
 
+### Traefik: resetar senha do dashboard
+
+**Sintoma:** Não consigo logar no dashboard do Traefik (ex.: `https://pr.seudominio.com`); a senha foi esquecida ou precisa ser alterada.
+
+**Causa:** O dashboard usa HTTP Basic Auth. O usuário e a senha vêm da variável `TRAEFIK_USER` no `.env`, no formato `usuario:hash_htpasswd`. Para alterar a senha é preciso gerar um novo hash, atualizar o `.env` e redeployar a stack Traefik.
+
+**Passos:**
+
+1. **Gerar o hash da nova senha**  
+   No servidor (ou máquina com `htpasswd`; no Ubuntu: `sudo apt install apache2-utils`), execute (substitua `usuario` e `senha` pelo usuário e senha desejados; use aspas na senha se tiver caracteres especiais como `@`):
+   ```bash
+   echo $(htpasswd -nb usuario 'senha') | sed -e s/\\$/\\$\\$/g
+   ```
+   Copie a saída inteira (ex.: `usuario:$$apr1$$...$$...`).
+
+2. **Atualizar o .env**  
+   No diretório do projeto, edite o arquivo `.env` e altere a linha:
+   ```env
+   TRAEFIK_USER=valor_copiado_no_passo_1
+   ```
+   Salve o arquivo.
+
+3. **Redeploy da stack Traefik**  
+   Para o Traefik passar a usar o novo `TRAEFIK_USER`:
+   ```bash
+   ./swarm-deploy.sh
+   ```
+   Escolha a opção **1** (Traefik) e depois **1** (Deploy/Atualizar). Em seguida acesse o dashboard com o novo usuário e senha.
+
+---
+
 ### 3. Arquivo acme.json com Permissões Incorretas
 
 **Sintoma:** Traefik não consegue salvar certificados, erro nos logs
@@ -279,6 +310,7 @@ No Cloudflare Dashboard, em DNS Records:
 ## 🔬 Comandos Úteis para Diagnóstico
 
 ### Ver logs do Traefik
+
 
 ```bash
 # Docker Compose

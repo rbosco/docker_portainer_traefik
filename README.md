@@ -1,6 +1,6 @@
-# Docker Stack: Traefik 2.10.7 + Portainer + n8n + Remotion
+# Docker Stack: Traefik 2.10.7 + Portainer
 
-Estrutura completa para gerenciamento de containers Docker usando Traefik como reverse proxy, Portainer como interface de gerenciamento, n8n para automação de workflows e Remotion para renderização de vídeo programática.
+Estrutura completa para gerenciamento de containers Docker usando Traefik como reverse proxy e Portainer como interface de gerenciamento.
 
 ## ⚠️ Requisitos Importantes
 
@@ -25,8 +25,6 @@ docker version --format '{{.Server.Version}}'
 
 - **Traefik 2.10.7**: Reverse proxy moderno com suporte a Let's Encrypt (compatível com Docker 24.0.7)
 - **Portainer CE**: Interface web para gerenciamento de containers Docker
-- **n8n**: Plataforma de automação de workflows com mais de 400 integrações nativas
-- **Remotion Studio**: Renderização de vídeo programática com React (para VSLs e criativos)
 - **Docker Compose**: Orquestração dos serviços
 - **Docker Swarm** (opcional): Suporte completo para clusters e alta disponibilidade
 
@@ -50,8 +48,6 @@ Este projeto inclui **suporte completo para Docker Swarm**!
 **URLs customizadas:**
 - Traefik Dashboard: `https://pr.seudominio.com`
 - Portainer: `https://painel.seudominio.com`
-- n8n: `https://n8n.seudominio.com`
-- Remotion Studio: `https://remotion.seudominio.com`
 
 **Início rápido com Swarm:**
 ```bash
@@ -73,6 +69,7 @@ nano .env
 ```
 .
 ├── docker-compose.yml          # Docker Compose (single node)
+├── docker-compose-n8n.yml      # n8n local (testes com Docker Compose)
 ├── docker-stack.yml            # Docker Swarm Stack (cluster)
 ├── setup.sh                    # Script de instalação automática (Compose)
 ├── swarm-init.sh              # Script de inicialização do Swarm
@@ -87,17 +84,10 @@ nano .env
 │   ├── traefik-swarm.yml     # Configuração Traefik (Swarm)
 │   └── dynamic/
 │       └── tls.yml           # Configuração TLS dinâmica
-├── remotion/
-│   ├── Dockerfile            # Imagem do Remotion Studio
-│   ├── entrypoint.sh         # Script de inicialização
-│   └── project/              # Seu projeto Remotion (coloque aqui)
 └── data/                      # Dados persistentes (não versionado)
     ├── traefik/
     │   └── acme.json         # Certificados Let's Encrypt
-    ├── portainer/            # Dados do Portainer
-    ├── n8n/                  # Dados e workflows do n8n
-    └── remotion/
-        └── output/           # Vídeos renderizados pelo Remotion
+    └── portainer/            # Dados do Portainer
 ```
 
 ## 🎯 Modos de Instalação
@@ -123,6 +113,19 @@ Este projeto suporta **dois modos de instalação**:
 # ou
 docker compose up -d          # Manual
 ```
+
+**Testar n8n localmente (Docker Compose):**
+```bash
+# Rede proxy (uma vez, se não existir)
+docker network create proxy 2>/dev/null || true
+
+# Subir n8n (acesso em http://localhost:5678)
+docker compose -f docker-compose-n8n.yml up -d
+
+# Com Traefik no ar: subir a base primeiro, depois n8n (também acessível pelo subdomínio)
+docker compose up -d && docker compose -f docker-compose-n8n.yml up -d
+```
+Use `.env` com `SUBDOMAIN_N8N` e `N8N_ENCRYPTION_KEY`; para teste rápido sem `.env`, o compose usa valores padrão.
 
 ### 🐝 Docker Swarm (Recomendado para produção)
 
@@ -214,7 +217,7 @@ Edite as seguintes variáveis no arquivo `.env`:
 - `DOMAIN`: Seu domínio (ex: example.com)
 - `TZ`: Seu timezone
 - `TRAEFIK_USER`: Credenciais para o dashboard do Traefik
-- `CF_API_EMAIL` e `CF_API_KEY`: Credenciais Cloudflare (se usar Let's Encrypt)
+- `ACME_EMAIL`: E-mail para Let's Encrypt (certificados HTTPS; porta 80 deve estar acessível)
 
 3. **Prepare os arquivos necessários:**
 ```bash
@@ -250,16 +253,6 @@ docker-compose logs -f
   - Direto: http://localhost:9000
   - Configure o usuário admin no primeiro acesso
 
-- **n8n (Automação de Workflows)**:
-  - Via proxy: http://n8n.localhost
-  - Direto: http://localhost:5678
-  - Configure o usuário admin no primeiro acesso
-
-- **Remotion Studio (Renderização de Vídeo)**:
-  - Via proxy: http://remotion.localhost
-  - Coloque seu projeto em: `./remotion/project/`
-  - Vídeos renderizados em: `./data/remotion/output/`
-
 **Produção (com domínio configurado):**
 
 - **Traefik Dashboard**: https://pr.seudominio.com
@@ -273,27 +266,22 @@ docker-compose logs -f
   - Visualização de logs e métricas
   - **Swarm:** Gerenciamento completo de nodes
 
-- **n8n**: https://n8n.seudominio.com
-  - Plataforma de automação com 400+ integrações
-  - Criação de workflows visuais
-  - Webhooks, agendamentos e integrações com APIs
-  - Integração com Remotion para automação de vídeo
+- **n8n** (se instalado): https://n8n.seudominio.com
+  - Automação de workflows
+  - Subdomínio configurável via `SUBDOMAIN_N8N` no `.env`
+  - Stack Swarm usa PostgreSQL; configure `N8N_DB_NAME`, `N8N_DB_USER` e `N8N_DB_PASSWORD` no `.env`
 
-- **Remotion Studio**: https://remotion.seudominio.com
-  - Visualização e edição de composições de vídeo
-  - Preview em tempo real das animações React
-  - Renderização de VSLs e criativos
-  - Saída de vídeos em `./data/remotion/output/`
+**Configuração DNS necessária (produção):**
 
-**Configuração DNS necessária:**
+Aponte os subdomínios para o IP do servidor (ex.: **178.156.200.149**):
+
 ```
-A    pr        SEU_IP_SERVIDOR
-A    painel    SEU_IP_SERVIDOR
-A    n8n       SEU_IP_SERVIDOR
-A    remotion  SEU_IP_SERVIDOR
+A    pr        178.156.200.149   # Traefik Dashboard
+A    painel    178.156.200.149   # Portainer
+A    n8n       178.156.200.149   # n8n (se usar SUBDOMAIN_N8N=n8n)
 
-# Ou com wildcard:
-A    *         SEU_IP_SERVIDOR
+# Ou com wildcard (todos os subdomínios):
+A    *         178.156.200.149
 ```
 
 ## ⚙️ Configuração
@@ -306,8 +294,6 @@ Você pode customizar os subdomínios dos serviços editando o arquivo `.env`:
 # Subdomínios padrão
 SUBDOMAIN_TRAEFIK=pr
 SUBDOMAIN_PORTAINER=painel
-SUBDOMAIN_N8N=n8n
-SUBDOMAIN_REMOTION=remotion
 ```
 
 **Exemplos de customização:**
@@ -316,8 +302,6 @@ SUBDOMAIN_REMOTION=remotion
 # Usar subdomínios tradicionais
 SUBDOMAIN_TRAEFIK=traefik
 SUBDOMAIN_PORTAINER=portainer
-SUBDOMAIN_N8N=automacao
-SUBDOMAIN_REMOTION=studio
 
 # Usar nomes personalizados
 SUBDOMAIN_TRAEFIK=dashboard
@@ -354,29 +338,13 @@ echo $(htpasswd -nb admin sua_senha) | sed -e s/\\$/\\$\\$/g
 
 Copie o resultado e atualize a variável `TRAEFIK_USER` no arquivo `.env`.
 
-### Let's Encrypt com Cloudflare
+### Let's Encrypt (HTTP challenge)
 
-1. Obtenha suas credenciais Cloudflare:
-   - API Email: seu email da conta Cloudflare
-   - API Key: Global API Key ou API Token com permissões DNS
+Os certificados são obtidos automaticamente pelo Traefik. Basta configurar no `.env`:
 
-2. Atualize o arquivo `traefik/traefik.yml`:
-```yaml
-certificatesResolvers:
-  cloudflare:
-    acme:
-      email: seu-email@example.com  # Atualize aqui
-      storage: acme.json
-      dnsChallenge:
-        provider: cloudflare
-```
+- `ACME_EMAIL`: e-mail para notificações de renovação (ex.: `ACME_EMAIL=admin@seudominio.com`)
 
-3. Adicione as variáveis de ambiente ao docker-compose.yml (seção environment do Traefik):
-```yaml
-environment:
-  - CF_API_EMAIL=${CF_API_EMAIL}
-  - CF_API_KEY=${CF_API_KEY}
-```
+Requisitos: **porta 80** deve estar acessível da internet (o Let's Encrypt valida em `http://seu-dominio/.well-known/acme-challenge/...`). Cada serviço continua redirecionando HTTP → HTTPS via middleware.
 
 ### Adicionar Novos Serviços
 
@@ -393,7 +361,7 @@ services:
       - "traefik.http.routers.meu-app.rule=Host(`app.${DOMAIN}`)"
       - "traefik.http.routers.meu-app.entrypoints=https"
       - "traefik.http.routers.meu-app.tls=true"
-      - "traefik.http.routers.meu-app.tls.certresolver=cloudflare"
+      - "traefik.http.routers.meu-app.tls.certresolver=letsencrypt"
       - "traefik.http.services.meu-app.loadbalancer.server.port=8000"
 
 networks:
@@ -600,69 +568,6 @@ docker stats
 docker events --filter type=service
 ```
 
-## 🎬 n8n + Remotion: Automação de VSL e Criativos
-
-Esta stack inclui um pipeline completo para geração automatizada de vídeos (VSLs e criativos) usando n8n como orquestrador e Remotion como motor de renderização.
-
-### Fluxo de Automação
-
-```
-Gatilho (Webhook/Agendamento)
-    │
-    ▼
-  n8n Workflow
-    │
-    ├─→ Gera script/conteúdo (OpenAI, Claude, etc.)
-    │
-    ├─→ Executa renderização Remotion via Docker CLI
-    │       docker exec remotion npx remotion render \
-    │         src/index.ts <Composicao> out/video.mp4 \
-    │         --props='{"titulo":"...", "conteudo":"..."}'
-    │
-    └─→ Distribui o vídeo (upload S3, notificação, etc.)
-```
-
-### Configurar Projeto Remotion
-
-1. Coloque seu projeto Remotion em `./remotion/project/`:
-```bash
-cd remotion/project
-npx create-video@latest .   # ou copie seu projeto existente
-```
-
-2. O container instala as dependências automaticamente na inicialização.
-
-3. Acesse o Remotion Studio para preview das composições:
-```
-https://remotion.seudominio.com
-```
-
-### Renderizar Vídeo via n8n
-
-No n8n, use o nó **Execute Command** ou **HTTP Request** para acionar renderizações:
-
-**Via Execute Command (n8n no mesmo servidor):**
-```bash
-docker exec remotion npx remotion render \
-  src/index.ts MinhaComposicao \
-  /app/out/video-{{ $now }}.mp4 \
-  --props='{"titulo":"{{ $json.titulo }}", "texto":"{{ $json.texto }}"}'
-```
-
-**Verificar vídeo renderizado:**
-- Os vídeos ficam em `./data/remotion/output/` no servidor
-- Configure no n8n um nó para mover/enviar o arquivo após renderização
-
-### Backup dos dados
-
-```bash
-# Backup dos workflows do n8n
-tar -czf n8n-backup-$(date +%Y%m%d).tar.gz data/n8n/
-
-# Backup dos vídeos renderizados
-tar -czf remotion-output-$(date +%Y%m%d).tar.gz data/remotion/output/
-```
-
 ## 🛡️ Segurança
 
 ### Boas Práticas Implementadas
@@ -731,12 +636,12 @@ docker compose up -d
 
 ### Certificados Let's Encrypt não são gerados
 
-1. Verifique se as credenciais Cloudflare estão corretas
+1. Confirme `ACME_EMAIL` no `.env` e que a **porta 80** está acessível da internet.
 2. Verifique os logs do Traefik:
 ```bash
 docker-compose logs traefik | grep -i acme
 ```
-3. Certifique-se de que o domínio está apontando para o servidor
+3. Certifique-se de que o domínio (A/CNAME) aponta para o IP do servidor.
 
 ### Dashboard do Traefik não acessível
 

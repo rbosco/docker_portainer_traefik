@@ -104,12 +104,8 @@ nano .env
 # Seu domínio
 DOMAIN=seudominio.com
 
-# Email para Let's Encrypt
+# Email para Let's Encrypt (porta 80 deve estar acessível)
 ACME_EMAIL=admin@seudominio.com
-
-# Credenciais Cloudflare (para DNS Challenge)
-CF_API_EMAIL=seu-email@cloudflare.com
-CF_API_KEY=sua-api-key
 
 # Autenticação Traefik Dashboard
 TRAEFIK_USER=admin:$$apr1$$hash$$aqui
@@ -172,6 +168,49 @@ chmod +x swarm-deploy.sh
 2. **Remover stack**: Remove completamente a stack
 3. **Ver status**: Mostra status dos serviços
 4. **Ver logs**: Exibe logs de um serviço específico
+
+### Rodar n8n no Swarm e corrigir 404
+
+O 404 ocorre quando o Traefik não encontra roteador para o host da requisição. A rota do n8n vem das **labels** do serviço; o host deve ser o mesmo do `.env`. Siga esta ordem:
+
+**1. Pré-requisitos**
+
+- Swarm ativo: `docker info | grep -i swarm` deve mostrar "Swarm: active".
+- Executar no diretório do repositório: `./swarm-deploy.sh`.
+- `.env` com:
+  - `DOMAIN=seudominio.com` (sem www, sem barra no fim)
+  - `SUBDOMAIN_N8N=n8n`
+  - `N8N_ENCRYPTION_KEY` definida (o script gera na primeira vez se não existir `data/n8n/config`).
+
+**2. Redes**
+
+- Traefik e n8n precisam estar na **mesma rede** ("proxy"). O script cria a rede **proxy** ao rodar.
+- Se aparecer **504 Gateway Timeout**: muitas vezes Traefik está em uma rede e o n8n em outra (ex.: `traefik_proxy` vs `proxy`). Faça **redeploy da stack Traefik** primeiro: `./swarm-deploy.sh` → opção **1** → opção **1**. Assim o Traefik passa a usar a rede "proxy" e consegue alcançar o n8n.
+
+**3. Ordem de deploy**
+
+1. Stack **traefik** primeiro: `./swarm-deploy.sh` → opção **1** → opção **1**.
+2. Stack **n8n** sempre pelo script: `./swarm-deploy.sh` → opção **3** (n8n) → opção **1** (Deploy/Atualizar).
+
+Não use `docker stack deploy -c docker-stack-n8n.yml n8n` manualmente; o script substitui o host no YAML para as labels ficarem corretas.
+
+**4. Verificações**
+
+- `docker service ls` → `n8n_n8n` em **1/1**.
+- Acesse **exatamente** `https://n8n.seudominio.com` (o host do `.env`).
+- DNS: registro A para o subdomínio (ex.: n8n) apontando para o IP do servidor.
+
+**5. Se o 404 continuar**
+
+- Conferir regra: `docker service inspect n8n_n8n --format '{{json .Spec.Labels}}'` → as labels `traefik.http.routers.n8n-secure.rule` e `traefik.http.routers.n8n.rule` devem ter `Host(\`n8n.seudominio.com\`)`. Se estiver vazio ou `Host(\`n8n.\`)`, refaça o deploy pelo script com o `.env` correto.
+- Dashboard Traefik: `https://pr.seudominio.com` → verificar se existe roteador para o host do n8n.
+- Checklist completo: ver [TROUBLESHOOTING.md](TROUBLESHOOTING.md), seção "n8n: 404 page not found".
+
+**6. 504 Gateway Timeout**
+
+- Significa que o Traefik encontrou a rota mas não consegue falar com o container n8n (rede diferente).
+- Confirme que existe só uma rede em uso para ambos: `docker network ls` → deve haver **proxy**. Se existir **traefik_proxy** e **proxy**, o Traefik pode estar em traefik_proxy e o n8n em proxy.
+- **Solução:** redeploy da stack **Traefik** (opção 1 → 1). O `docker-stack.yml` atual usa a rede externa "proxy"; após o redeploy, Traefik e n8n ficam na mesma rede e o 504 some.
 
 ## 🏗️ Arquitetura do Cluster
 
@@ -327,7 +366,7 @@ services:
         - "traefik.http.routers.app.rule=Host(`app.${DOMAIN}`)"
         - "traefik.http.routers.app.entrypoints=https"
         - "traefik.http.routers.app.tls=true"
-        - "traefik.http.routers.app.tls.certresolver=cloudflare"
+        - "traefik.http.routers.app.tls.certresolver=letsencrypt"
         - "traefik.http.services.app.loadbalancer.server.port=8000"
 
 networks:
@@ -369,10 +408,9 @@ docker service logs --tail 100 traefik_traefik
 ```bash
 # Verificar logs do Traefik
 docker service logs traefik_traefik | grep -i acme
-
-# Verificar se Cloudflare está configurado
-docker service inspect traefik_traefik | grep CF_
 ```
+
+Confirme `ACME_EMAIL` no `.env` e que a porta 80 está acessível da internet.
 
 ### Node não se conecta ao cluster
 

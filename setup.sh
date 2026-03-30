@@ -35,6 +35,24 @@ print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
 }
 
+# Docker Compose v1 (docker-compose) ou plugin v2 (docker compose)
+docker_compose() {
+    if command -v docker-compose &> /dev/null; then
+        docker-compose "$@"
+    elif docker compose version &> /dev/null; then
+        docker compose "$@"
+    else
+        print_error "Docker Compose não disponível"
+        return 127
+    fi
+}
+
+if command -v docker-compose &> /dev/null; then
+    COMPOSE_HINT="docker-compose"
+else
+    COMPOSE_HINT="docker compose"
+fi
+
 # Verificar se está rodando como root
 check_root() {
     if [ "$EUID" -eq 0 ]; then
@@ -108,7 +126,7 @@ generate_password_hash() {
     if command -v htpasswd &> /dev/null; then
         echo $(htpasswd -nb "$username" "$password" | sed -e s/\\$/\\$\\$/g)
     else
-        print_warning "htpasswd não encontrado, usando senha padrão"
+        echo -e "${YELLOW}⚠${NC} htpasswd não encontrado, usando senha padrão" >&2
         echo "admin:\$\$apr1\$\$8EVjn/nj\$\$GiLUZqcbueTFeD23SuB6x0"
     fi
 }
@@ -126,7 +144,7 @@ cleanup_existing() {
 
     if [[ "$CLEANUP" =~ ^[Ss]$ ]]; then
         print_info "Parando e removendo containers..."
-        docker-compose down -v 2>/dev/null || true
+        docker_compose down -v 2>/dev/null || true
 
         print_info "Removendo rede proxy..."
         docker network rm proxy 2>/dev/null || true
@@ -208,30 +226,12 @@ collect_information() {
         SUBDOMAIN_N8N=${SUBDOMAIN_N8N:-n8n}
     fi
 
-    echo -e "${YELLOW}Exemplos: remotion, video, studio${NC}"
-    read -p "Subdomínio do Remotion [remotion]: " SUBDOMAIN_REMOTION
-    SUBDOMAIN_REMOTION=${SUBDOMAIN_REMOTION:-remotion}
-
-    # Cloudflare (apenas para produção)
+    # Let's Encrypt (apenas para produção)
     if [ "$INSTALL_MODE" = "2" ]; then
         echo
-        print_info "Para usar Let's Encrypt com Cloudflare, você precisa:"
-        print_info "- API Email (email da sua conta Cloudflare)"
-        print_info "- API Key ou API Token"
-        echo
-        read -p "Configurar Cloudflare agora? [s/N]: " SETUP_CF
-
-        if [[ "$SETUP_CF" =~ ^[Ss]$ ]]; then
-            read -p "Email Cloudflare: " CF_API_EMAIL
-            read -sp "API Key/Token Cloudflare: " CF_API_KEY
-            echo
-            USE_CLOUDFLARE="true"
-        else
-            print_warning "Você pode configurar Cloudflare depois editando o arquivo .env"
-            CF_API_EMAIL="your-email@example.com"
-            CF_API_KEY="your-cloudflare-api-key"
-            USE_CLOUDFLARE="false"
-        fi
+        print_info "Let's Encrypt (HTTP challenge): porta 80 deve estar acessível."
+        read -p "Email para Let's Encrypt [admin@$DOMAIN]: " ACME_EMAIL
+        ACME_EMAIL=${ACME_EMAIL:-admin@$DOMAIN}
     fi
 }
 
@@ -246,7 +246,6 @@ DOMAIN=$DOMAIN
 # Subdomains configuration
 SUBDOMAIN_TRAEFIK=$SUBDOMAIN_TRAEFIK
 SUBDOMAIN_PORTAINER=$SUBDOMAIN_PORTAINER
-SUBDOMAIN_REMOTION=$SUBDOMAIN_REMOTION
 
 # Timezone
 TZ=$TZ
@@ -270,9 +269,8 @@ EOF
     if [ "$INSTALL_MODE" = "2" ]; then
         cat >> .env << EOF
 
-# Cloudflare API (for Let's Encrypt DNS challenge)
-CF_API_EMAIL=$CF_API_EMAIL
-CF_API_KEY=$CF_API_KEY
+# ACME (Let's Encrypt) - HTTP challenge
+ACME_EMAIL=$ACME_EMAIL
 EOF
     fi
 
@@ -284,7 +282,7 @@ prepare_directories() {
     print_header "Preparando Estrutura de Diretórios"
 
     # Criar diretórios se não existirem
-    mkdir -p data/traefik data/portainer data/remotion/output traefik/dynamic remotion/project
+    mkdir -p data/traefik data/portainer traefik/dynamic
     if [ "$INSTALL_N8N" = "true" ]; then
         mkdir -p data/n8n
     fi
@@ -334,10 +332,10 @@ log:
 EOF
         print_success "Configuração ajustada para modo desenvolvimento"
     else
-        # Atualizar email no traefik.yml para produção
-        if [ "$USE_CLOUDFLARE" = "true" ]; then
-            sed -i "s/your-email@example.com/$CF_API_EMAIL/g" traefik/traefik.yml
-            print_success "Email configurado no traefik.yml"
+        # Atualizar email no traefik.yml para produção (Let's Encrypt)
+        if [ -n "$ACME_EMAIL" ]; then
+            sed -i "s/your-email@example.com/$ACME_EMAIL/g" traefik/traefik.yml
+            print_success "ACME_EMAIL configurado no traefik.yml"
         fi
     fi
 }
@@ -353,16 +351,6 @@ update_docker_compose() {
         sed -i '/tls.domains/d' docker-compose.yml
 
         print_success "Docker Compose ajustado para desenvolvimento"
-    else
-        # Adicionar variáveis de ambiente Cloudflare se configurado
-        if [ "$USE_CLOUDFLARE" = "true" ]; then
-            # Verificar se já tem as variáveis
-            if ! grep -q "CF_API_EMAIL" docker-compose.yml; then
-                # Adicionar após a linha de TZ no serviço traefik
-                sed -i '/- TZ=/a\      - CF_API_EMAIL=${CF_API_EMAIL}\n      - CF_API_KEY=${CF_API_KEY}' docker-compose.yml
-                print_success "Variáveis Cloudflare adicionadas ao docker-compose.yml"
-            fi
-        fi
     fi
 }
 
@@ -371,16 +359,16 @@ start_services() {
     print_header "Iniciando Serviços"
 
     print_info "Parando containers existentes (se houver)..."
-    docker-compose down 2>/dev/null || true
+    docker_compose down 2>/dev/null || true
 
     print_info "Baixando imagens..."
-    docker-compose pull
+    docker_compose pull
 
     print_info "Iniciando containers..."
     if [ "$INSTALL_N8N" = "true" ]; then
-        docker-compose up -d
+        docker_compose up -d
     else
-        docker-compose up -d traefik portainer remotion
+        docker_compose up -d traefik portainer
     fi
 
     print_success "Serviços iniciados!"
@@ -393,15 +381,15 @@ check_services() {
     sleep 5
 
     echo
-    docker-compose ps
+    docker_compose ps
     echo
 
     # Verificar se os containers estão rodando
-    if docker-compose ps | grep -q "Up"; then
+    if docker_compose ps | grep -q "Up"; then
         print_success "Containers estão rodando"
     else
         print_error "Alguns containers não iniciaram corretamente"
-        print_info "Execute: docker-compose logs"
+        print_info "Execute: ${COMPOSE_HINT} logs"
         return 1
     fi
 }
@@ -434,10 +422,6 @@ show_access_info() {
             echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
             echo
         fi
-        echo -e "${BLUE}Remotion Studio (Renderização de Vídeo):${NC}"
-        echo -e "  Via proxy: ${YELLOW}http://$SUBDOMAIN_REMOTION.$DOMAIN${NC}"
-        echo -e "  ${YELLOW}Coloque seu projeto em: ./remotion/project/${NC}"
-        echo -e "  ${YELLOW}Vídeos renderizados em: ./data/remotion/output/${NC}"
     else
         echo -e "${BLUE}Traefik Dashboard:${NC}"
         echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_TRAEFIK.$DOMAIN${NC}"
@@ -454,10 +438,6 @@ show_access_info() {
             echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
             echo
         fi
-        echo -e "${BLUE}Remotion Studio (Renderização de Vídeo):${NC}"
-        echo -e "  URL: ${YELLOW}https://$SUBDOMAIN_REMOTION.$DOMAIN${NC}"
-        echo -e "  ${YELLOW}Coloque seu projeto em: ./remotion/project/${NC}"
-        echo -e "  ${YELLOW}Vídeos renderizados em: ./data/remotion/output/${NC}"
         echo
         print_warning "Certifique-se de que os registros DNS estão configurados:"
         echo -e "  ${YELLOW}$SUBDOMAIN_TRAEFIK.$DOMAIN${NC} → IP do servidor"
@@ -465,15 +445,14 @@ show_access_info() {
         if [ "$INSTALL_N8N" = "true" ]; then
             echo -e "  ${YELLOW}$SUBDOMAIN_N8N.$DOMAIN${NC} → IP do servidor"
         fi
-        echo -e "  ${YELLOW}$SUBDOMAIN_REMOTION.$DOMAIN${NC} → IP do servidor"
     fi
 
     echo
     echo -e "${BLUE}Comandos Úteis:${NC}"
-    echo -e "  Ver logs: ${YELLOW}docker-compose logs -f${NC}"
-    echo -e "  Parar: ${YELLOW}docker-compose down${NC}"
-    echo -e "  Reiniciar: ${YELLOW}docker-compose restart${NC}"
-    echo -e "  Status: ${YELLOW}docker-compose ps${NC}"
+    echo -e "  Ver logs: ${YELLOW}${COMPOSE_HINT} logs -f${NC}"
+    echo -e "  Parar: ${YELLOW}${COMPOSE_HINT} down${NC}"
+    echo -e "  Reiniciar: ${YELLOW}${COMPOSE_HINT} restart${NC}"
+    echo -e "  Status: ${YELLOW}${COMPOSE_HINT} ps${NC}"
     echo
 }
 
@@ -512,7 +491,7 @@ EOF
     else
         echo
         print_error "Instalação concluída com avisos"
-        print_info "Verifique os logs: docker-compose logs -f"
+        print_info "Verifique os logs: ${COMPOSE_HINT} logs -f"
     fi
 }
 

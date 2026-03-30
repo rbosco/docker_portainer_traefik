@@ -5,6 +5,10 @@
 
 set -e
 
+# Executar sempre no diretório onde está o script (para .env e stacks)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 # Cores
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -77,10 +81,15 @@ fi
 
 print_success "Arquivo .env encontrado"
 
-# Carregar variáveis do .env
+# Carregar variáveis do .env preservando caracteres especiais ($$, $, etc.)
 print_info "Carregando variáveis de ambiente do .env..."
-# Usar export com xargs para evitar expansão de variáveis pelo bash
-export $(grep -v '^#' .env | grep -v '^$' | xargs)
+while IFS='=' read -r key value; do
+    [[ "$key" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "$key" ]] && continue
+    # Converter $$ para $ (convenção Docker Compose no .env)
+    value="${value//\$\$/\$}"
+    export "$key"="$value"
+done < .env
 print_success "Variáveis de ambiente carregadas"
 
 # Verificar variáveis obrigatórias
@@ -156,7 +165,7 @@ case $STACK_CHOICE in
     3)
         STACK_NAME="n8n"
         STACK_FILE="docker-stack-n8n.yml"
-        STACK_DESCRIPTION="n8n"
+        STACK_DESCRIPTION="n8n (Automação de Workflows)"
 
         # Verificar se a stack traefik está rodando
         if ! docker stack ls | grep -q "traefik"; then
@@ -165,20 +174,31 @@ case $STACK_CHOICE in
             exit 1
         fi
 
-        # Verificar variáveis n8n
-        N8N_VARS=("N8N_ENCRYPTION_KEY" "SUBDOMAIN_N8N")
+        # Gerar N8N_DB_PASSWORD se estiver vazio ou placeholder (antes da validação)
+        if [ -z "$N8N_DB_PASSWORD" ] || [ "$N8N_DB_PASSWORD" = "change_this_secure_password" ]; then
+            N8N_DB_PASSWORD=$(openssl rand -base64 24 2>/dev/null || head -c 32 /dev/urandom | base64 2>/dev/null)
+            export N8N_DB_PASSWORD
+            if grep -q "^N8N_DB_PASSWORD=" .env 2>/dev/null; then
+                sed -i.bak "s|^N8N_DB_PASSWORD=.*|N8N_DB_PASSWORD=$N8N_DB_PASSWORD|" .env
+            else
+                echo "N8N_DB_PASSWORD=$N8N_DB_PASSWORD" >> .env
+            fi
+            print_info "N8N_DB_PASSWORD gerada e salva no .env"
+        fi
+        # Verificar variáveis n8n obrigatórias (incl. Postgres)
+        N8N_VARS=("SUBDOMAIN_N8N" "N8N_ENCRYPTION_KEY" "N8N_DB_NAME" "N8N_DB_USER" "N8N_DB_PASSWORD")
         for var in "${N8N_VARS[@]}"; do
             if [ -z "${!var}" ]; then
                 print_error "Variável $var não definida no .env"
-                print_info "Configure as variáveis do n8n no arquivo .env"
+                print_info "Configure SUBDOMAIN_N8N, N8N_ENCRYPTION_KEY e N8N_DB_* no arquivo .env"
                 exit 1
             fi
         done
 
-        # Criar diretório n8n
-        print_info "Criando diretório de dados do n8n..."
+        # Criar diretório de dados do n8n (opcional; a stack usa volume nomeado)
+        print_info "Criando diretório data/n8n (se necessário)..."
         mkdir -p data/n8n
-        print_success "Diretório criado"
+        print_success "Diretórios verificados"
         ;;
     *)
         print_error "Opção inválida"
@@ -213,6 +233,17 @@ case $DEPLOY_OPTION in
                 print_info "Deploy cancelado"
                 exit 0
             fi
+        fi
+
+        # Validar variáveis críticas antes do deploy
+        if [ -z "$DOMAIN" ]; then
+            print_error "Variável DOMAIN está vazia! Verifique o arquivo .env"
+            exit 1
+        fi
+        if [ "$STACK_NAME" = "traefik" ] && [ -z "$ACME_EMAIL" ]; then
+            print_error "Variável ACME_EMAIL está vazia! Necessária para Let's Encrypt."
+            print_info "Configure ACME_EMAIL no .env (ex.: ACME_EMAIL=admin@seudominio.com)"
+            exit 1
         fi
 
         # Deploy da stack
@@ -278,6 +309,13 @@ case $DEPLOY_OPTION in
             echo
             print_info "Para executar backup manualmente:"
             echo -e "  ${YELLOW}docker exec \$(docker ps -q -f name=wordpress_backup) /backup.sh${NC}"
+        elif [ "$STACK_NAME" = "n8n" ]; then
+            echo -e "${BLUE}n8n (Automação de Workflows):${NC}"
+            echo -e "  URL: ${YELLOW}https://${SUBDOMAIN_N8N:-n8n}.${DOMAIN}${NC}"
+            echo -e "  ${YELLOW}Configure o usuário admin no primeiro acesso${NC}"
+            echo
+            print_warning "Certifique-se de que o DNS está configurado:"
+            echo -e "  ${YELLOW}${SUBDOMAIN_N8N:-n8n}.${DOMAIN}${NC} → IP do servidor"
         fi
         echo
         ;;
@@ -288,6 +326,7 @@ case $DEPLOY_OPTION in
 
         if ! docker stack ls | grep -q "$STACK_NAME"; then
             print_error "Stack '$STACK_NAME' não encontrada"
+            print_info "Faça o deploy primeiro: execute este script, escolha a stack e depois a opção 1 (Deploy/Atualizar)."
             exit 1
         fi
 
@@ -310,6 +349,7 @@ case $DEPLOY_OPTION in
 
         if ! docker stack ls | grep -q "$STACK_NAME"; then
             print_error "Stack '$STACK_NAME' não encontrada"
+            print_info "Faça o deploy primeiro: execute este script, escolha a stack e depois a opção 1 (Deploy/Atualizar)."
             exit 1
         fi
 
@@ -331,6 +371,7 @@ case $DEPLOY_OPTION in
 
         if ! docker stack ls | grep -q "$STACK_NAME"; then
             print_error "Stack '$STACK_NAME' não encontrada"
+            print_info "Faça o deploy primeiro: execute este script, escolha a stack e depois a opção 1 (Deploy/Atualizar)."
             exit 1
         fi
 
@@ -370,6 +411,8 @@ case $DEPLOY_OPTION in
                 5) SERVICE="backup" ;;
                 *) SERVICE="wordpress" ;;
             esac
+        elif [ "$STACK_NAME" = "n8n" ]; then
+            SERVICE="n8n"
         fi
 
         print_info "Exibindo logs do serviço: ${STACK_NAME}_${SERVICE}"
@@ -386,6 +429,8 @@ case $DEPLOY_OPTION in
         echo "  - Remover todos os volumes (dados persistentes)"
         if [ "$STACK_NAME" = "traefik" ]; then
             echo "  - Remover a rede 'proxy'"
+        elif [ "$STACK_NAME" = "n8n" ]; then
+            echo "  - Remover os volumes n8n_n8n_data e n8n_postgres_data (workflows e banco Postgres)"
         fi
         echo "  ${RED}TODOS OS DADOS SERÃO PERDIDOS!${NC}"
         echo
@@ -422,6 +467,8 @@ case $DEPLOY_OPTION in
                 docker volume rm wordpress_wordpress-data 2>/dev/null || true
                 docker volume rm wordpress_mysql-data 2>/dev/null || true
                 docker volume rm wordpress_redis-data 2>/dev/null || true
+            elif [ "$STACK_NAME" = "n8n" ]; then
+                docker volume rm n8n_n8n_data n8n_postgres_data 2>/dev/null || true
             fi
 
             print_success "Volumes antigos limpos (se existiam)"
@@ -446,6 +493,13 @@ case $DEPLOY_OPTION in
                 read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA
                 if [ "$CONFIRM_DATA" = "SIM" ]; then
                     rm -rf data/wordpress/* backups/wordpress/*
+                    print_success "Dados locais removidos"
+                fi
+            elif [ "$STACK_NAME" = "n8n" ]; then
+                print_warning "Remover dados locais em ./data/n8n?"
+                read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA
+                if [ "$CONFIRM_DATA" = "SIM" ]; then
+                    rm -rf data/n8n/*
                     print_success "Dados locais removidos"
                 fi
             fi
@@ -474,7 +528,11 @@ esac
 echo
 print_info "Comandos úteis:"
 echo "  Ver serviços: ${YELLOW}docker stack services $STACK_NAME${NC}"
-echo "  Ver logs: ${YELLOW}docker service logs -f ${STACK_NAME}_traefik${NC}"
-echo "  Escalar serviço: ${YELLOW}docker service scale ${STACK_NAME}_portainer=2${NC}"
-echo "  Atualizar serviço: ${YELLOW}docker service update ${STACK_NAME}_traefik${NC}"
+if [ "$STACK_NAME" = "n8n" ]; then
+    echo "  Logs n8n: ${YELLOW}docker service logs -f ${STACK_NAME}_n8n${NC}"
+else
+    echo "  Ver logs: ${YELLOW}docker service logs -f ${STACK_NAME}_traefik${NC}"
+    echo "  Escalar serviço: ${YELLOW}docker service scale ${STACK_NAME}_portainer=2${NC}"
+    echo "  Atualizar serviço: ${YELLOW}docker service update ${STACK_NAME}_traefik${NC}"
+fi
 echo

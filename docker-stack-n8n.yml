@@ -1,36 +1,97 @@
+# Stack n8n com PostgreSQL para Docker Swarm
+# Requer: stack Traefik rodando e rede proxy existente.
+# Configure no .env: DOMAIN, SUBDOMAIN_N8N, N8N_ENCRYPTION_KEY, N8N_DB_NAME, N8N_DB_USER, N8N_DB_PASSWORD.
+#
+# 504 Gateway Timeout? Traefik e n8n precisam usar a MESMA rede ("proxy"). Como o n8n está em duas
+# redes (proxy + n8n_internal), os labels traefik.docker.network=proxy e traefik.swarm.network=proxy
+# garantem que o Traefik acesse o n8n pela rede proxy.
+#
+# Primeira subida: o n8n pode falhar 1–2 vezes até o Postgres estar pronto; o restart_policy reintenta.
+#
+# Notas:
+# - "Python 3 is missing" no log é inofensivo com N8N_PYTHON_ENABLED=false.
+# - Reinícios (SIGTERM): imagem fixa 2.11.3, memória e stop_grace_period reduzem substituições indesejadas.
+# - Migração SQLite → Postgres: banco novo; exporte/importe workflows pelo n8n se precisar.
+
 services:
-  n8n:
-    image: n8nio/n8n:latest
+  postgres:
+    image: postgres:15-alpine
     environment:
-      - TZ=${TZ:-America/Sao_Paulo}
-      - N8N_HOST=${SUBDOMAIN_N8N:-n8n}.${DOMAIN}
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=https
-      - NODE_ENV=production
-      - WEBHOOK_URL=https://${SUBDOMAIN_N8N:-n8n}.${DOMAIN}/
-      - GENERIC_TIMEZONE=${TZ:-America/Sao_Paulo}
-      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - POSTGRES_USER=${N8N_DB_USER:-n8n}
+      - POSTGRES_PASSWORD=${N8N_DB_PASSWORD}
+      - POSTGRES_DB=${N8N_DB_NAME:-n8n}
     volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - ./data/n8n:/home/node/.n8n
+      - postgres_data:/var/lib/postgresql/data
     networks:
-      - proxy
+      - n8n_internal
     deploy:
       mode: replicated
       replicas: 1
       placement:
         constraints:
           - node.role == manager
-      update_config:
-        parallelism: 1
-        delay: 10s
       restart_policy:
         condition: on-failure
         delay: 5s
-        max_attempts: 3
+      resources:
+        reservations:
+          memory: 256M
+        limits:
+          memory: 512M
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.11.3
+    command: ["start"]
+    environment:
+      - TZ=${TZ:-America/Sao_Paulo}
+      - GENERIC_TIMEZONE=${TZ:-America/Sao_Paulo}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-https}
+      - N8N_HOST=${SUBDOMAIN_N8N:-n8n}.${DOMAIN}
+      - WEBHOOK_URL=https://${SUBDOMAIN_N8N:-n8n}.${DOMAIN}/
+      - N8N_PROXY_HOPS=1
+      - NODE_ENV=production
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - N8N_PYTHON_ENABLED=false
+      # PostgreSQL
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${N8N_DB_NAME:-n8n}
+      - DB_POSTGRESDB_USER=${N8N_DB_USER:-n8n}
+      - DB_POSTGRESDB_PASSWORD=${N8N_DB_PASSWORD}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - n8n_data:/home/node/.n8n
+    stop_grace_period: 120s
+    networks:
+      - proxy
+      - n8n_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      endpoint_mode: dnsrr
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+      resources:
+        reservations:
+          memory: 512M
+        limits:
+          memory: 1G
       labels:
         - "traefik.enable=true"
-        # HTTP
+        - "traefik.docker.network=proxy"
+        - "traefik.swarm.network=proxy"
+        # HTTP → redirect HTTPS
         - "traefik.http.routers.n8n.entrypoints=http"
         - "traefik.http.routers.n8n.rule=Host(`${SUBDOMAIN_N8N:-n8n}.${DOMAIN}`)"
         - "traefik.http.routers.n8n.middlewares=n8n-https-redirect"
@@ -38,14 +99,22 @@ services:
         - "traefik.http.routers.n8n-secure.entrypoints=https"
         - "traefik.http.routers.n8n-secure.rule=Host(`${SUBDOMAIN_N8N:-n8n}.${DOMAIN}`)"
         - "traefik.http.routers.n8n-secure.tls=true"
-        - "traefik.http.routers.n8n-secure.tls.certresolver=cloudflare"
+        - "traefik.http.routers.n8n-secure.tls.certresolver=letsencrypt"
         - "traefik.http.routers.n8n-secure.service=n8n"
         # Middlewares
         - "traefik.http.middlewares.n8n-https-redirect.redirectscheme.scheme=https"
         - "traefik.http.middlewares.n8n-https-redirect.redirectscheme.permanent=true"
-        # Service
+        # Service (porta do n8n)
         - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+
+volumes:
+  n8n_data:
+  postgres_data:
 
 networks:
   proxy:
     external: true
+    name: proxy
+  n8n_internal:
+    driver: overlay
+    internal: true
