@@ -2,11 +2,8 @@ FROM docker.n8n.io/n8nio/n8n:latest
 
 USER root
 
-# DOCX text extraction dependencies for n8n workflows.
-RUN npm install -g mammoth && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends pandoc && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# DOCX text extraction: mammoth is pure Node (works on n8n's minimal image).
+# Pandoc is not installed here because the official image has neither apk nor apt-get.
+RUN npm install -g mammoth
 
 USER node
