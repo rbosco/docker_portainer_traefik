@@ -444,6 +444,67 @@ Ao pedir ajuda, forneça:
 
 ---
 
+## Stack `remotion` (ou outra) invisível no Portainer e sem routers no Traefik
+
+O Portainer CE e o Traefik leem o **mesmo** Docker Swarm que o `docker` CLI quando aponta para o socket do manager (`unix:///var/run/docker.sock`). Não há registro separado: se a stack não existir neste Swarm, não aparece em lugar nenhum; se existir mas o Portainer mostrar outro cluster, o endpoint do Portainer está errado.
+
+### Árvore de diagnóstico (rode na VPS, mesma sessão onde executa `./swarm-deploy.sh`)
+
+**1. Contexto Docker (causa mais comum: deploy foi para outro daemon)**
+
+```bash
+docker context show
+echo "DOCKER_HOST=${DOCKER_HOST:-<vazio>}"
+docker info --format '{{.Name}}'
+docker stack ls
+```
+
+- Se **`remotion` não aparece** em `docker stack ls`: a stack nunca foi criada neste Swarm (ex.: `DOCKER_CONTEXT` remoto, ou deploy abortado antes do `docker stack deploy`). Traefik e Portainer **não** podem mostrar o que não existe aqui.
+- Se **`remotion` aparece** no CLI mas **não** no Portainer: o Portainer está ligado a **outro** ambiente. Em Portainer: **Environments** → confirme que o endpoint em uso é o Swarm deste host (a stack `traefik` usa o agent em `tcp://tasks.agent:9001` — [docker-stack.yml](docker-stack.yml)).
+
+**Forçar o CLI no socket local (sem depender do prompt interativo):**
+
+```bash
+export SWARM_DEPLOY_FORCE_LOCAL=1
+./swarm-deploy.sh
+```
+
+Ou manualmente antes do deploy:
+
+```bash
+unset DOCKER_HOST
+export DOCKER_CONTEXT=default
+docker stack deploy -c docker-stack-remotion.yml remotion
+docker stack ls | grep remotion
+```
+
+**2. Serviços e réplicas (Traefik só expõe backend se houver task saudável)**
+
+```bash
+docker stack services remotion
+docker stack ps remotion --no-trunc
+```
+
+Se aparecer **0/1** ou tasks `Rejected` / `Failed`: veja a mensagem com `docker service ps remotion_remotion-studio --no-trunc` (imagem `remotion-local:latest` ausente no node, OOM, etc.).
+
+**3. Logs do Traefik**
+
+```bash
+docker service logs traefik_traefik --tail 80
+```
+
+Procure erros do provider Docker / acesso ao socket.
+
+**4. Routers esperados no Traefik**
+
+Por desenho, **apenas** `remotion-studio` e `minio` têm labels Traefik em [docker-stack-remotion.yml](docker-stack-remotion.yml). O serviço **`remotion-render` não tem host público** (só rede `remotion_internal`); isso é esperado.
+
+**5. Script atualizado**
+
+O [swarm-deploy.sh](swarm-deploy.sh) inclui `ensure_local_docker` (alerta de contexto remoto), reimpressão do endpoint antes de cada `docker stack deploy`, e validação: a stack tem de aparecer em `docker stack ls` logo após o deploy. Se a VPS ainda não tiver essas linhas, faça `git pull` no repositório.
+
+---
+
 ## 📖 Recursos Adicionais
 
 - [Documentação do Traefik](https://doc.traefik.io/traefik/)

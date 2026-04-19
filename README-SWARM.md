@@ -225,20 +225,22 @@ Não use `docker stack deploy -c docker-stack-n8n.yml n8n` manualmente; o script
 
 ### Stack 4: Remotion + MinIO (Studio + Render + Storage S3)
 
-Gera vídeos programaticamente via [Remotion](https://www.remotion.dev/) (framework React) com dois serviços principais e storage S3 self-hosted.
+Gera vídeos programaticamente via [Remotion](https://www.remotion.dev/) (framework React) com dois serviços principais e storage S3 self-hosted (MinIO).
 
 **Arquitetura:**
 
 - `remotion-studio` — UI web em `https://remotion.${DOMAIN}` (editor visual das compositions), protegido por BasicAuth do Traefik (reutiliza `TRAEFIK_USER`).
-- `remotion-render` — API Express (`POST /renders`, `GET /renders/:id`) baseada no template oficial [`remotion-dev/template-render-server`](https://github.com/remotion-dev/template-render-server). **Sem rota Traefik**; acessível apenas na rede overlay `remotion_internal`.
+- `remotion-render` — API Express (`POST /renders`, `GET /renders/:id`, `GET /health`) em `./remotion/server/`, com render via `@remotion/renderer` e upload do MP4 para o MinIO (variáveis `S3_*` injetadas pela stack). **Sem rota Traefik**; acessível apenas na rede overlay `remotion_internal`.
 - `minio` — Storage S3-compatível. Console em `https://minio.${DOMAIN}`, API em `https://s3.${DOMAIN}`.
 - `minio-setup` — Init container (`minio/mc`) que cria o bucket `remotion` na primeira subida.
+
+O projeto Remotion deste repositório fica em **`./remotion/`** (versionado). Só se essa pasta **não** existir (ex.: clone antigo sem a pasta), o `swarm-deploy.sh` oferece clonar o template oficial [`remotion-dev/template-render-server`](https://github.com/remotion-dev/template-render-server) como fallback.
 
 **Pré-requisitos:**
 
 - Stack **Traefik** já rodando (opção 1).
 - **6 GB RAM livres no manager** (render = 4 GB, studio = 2 GB, MinIO ≈ 256 MB).
-- `git` instalado no manager (para clonar o template Remotion).
+- `git` instalado no manager **apenas** se for usar o fallback de clone do template (repositório padrão já traz `./remotion/`).
 - DNS configurado para 3 subdomínios:
   - `remotion.${DOMAIN}` → IP do servidor
   - `minio.${DOMAIN}` → IP do servidor
@@ -247,16 +249,18 @@ Gera vídeos programaticamente via [Remotion](https://www.remotion.dev/) (framew
 **Deploy:**
 
 ```bash
+# Opcional em SSH com DOCKER_CONTEXT remoto herdado:
+# export SWARM_DEPLOY_FORCE_LOCAL=1
 ./swarm-deploy.sh
 # 1) Escolher stack -> 4 (Remotion + MinIO)
 # 2) Escolher -> 1 (Deploy/Atualizar)
 ```
 
 Na primeira execução o script:
-1. Clona `remotion-dev/template-render-server` em `./remotion/` (se não existir).
+1. Usa `./remotion/` do repositório (ou pergunta se deseja clonar o template se a pasta não existir).
 2. Builda a imagem local `remotion-local:latest` (5-10 min).
 3. Gera `MINIO_ROOT_PASSWORD` no `.env` se estiver vazia.
-4. Faz `docker stack deploy -c docker-stack-remotion.yml remotion`.
+4. Confirma o endpoint Docker e executa `docker stack deploy -c docker-stack-remotion.yml remotion` (ver também [TROUBLESHOOTING.md](TROUBLESHOOTING.md) se a stack não aparecer no Portainer).
 
 **Customizar as compositions:**
 
@@ -284,21 +288,21 @@ Depois, no workflow do n8n use **HTTP Request**:
 POST http://remotion-render:3000/renders
 Content-Type: application/json
 {
-  "compositionId": "MyComp",
+  "compositionId": "HelloWorld",
   "inputProps": { "title": "Olá do n8n" }
 }
 
--> resposta: { "id": "<render-id>" }
+-> resposta: { "id": "<render-id>", "status": "queued" }
 ```
 
 Polling do status:
 
 ```
 GET http://remotion-render:3000/renders/<render-id>
--> quando status = "done": pegue a URL do MP4
+-> quando status = "done": use o campo "url" (MP4 público em https://s3.${DOMAIN}/<bucket>/renders/<id>.mp4)
 ```
 
-> O template oficial salva o MP4 localmente por padrão. Em produção, customize `./remotion/api/` para fazer upload para MinIO usando as variáveis `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` já injetadas pelo `docker-stack-remotion.yml`. Assim a API devolve uma URL pública assinada em `https://s3.${DOMAIN}/remotion/...`.
+A API de render já faz upload para o MinIO usando `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` (definidas em [docker-stack-remotion.yml](docker-stack-remotion.yml)). Composition de exemplo incluída: **`HelloWorld`** (veja `./remotion/src/compositions/`).
 
 **MinIO Console:**
 
