@@ -44,6 +44,9 @@ async function runRender(jobId: string, compositionId: string, inputProps: Recor
       codec,
       outputLocation: outPath,
       inputProps,
+      chromiumOptions: {
+        enableMultiProcessOnLinux: true,
+      },
       onProgress: ({ progress }) => {
         if (Math.floor(progress * 100) % 10 === 0) {
           console.log(`[render ${jobId}] ${Math.round(progress * 100)}%`);

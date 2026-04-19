@@ -262,6 +262,10 @@ Na primeira execução o script:
 3. Gera `MINIO_ROOT_PASSWORD` no `.env` se estiver vazia.
 4. Confirma o endpoint Docker e executa `docker stack deploy -c docker-stack-remotion.yml remotion` (ver também [TROUBLESHOOTING.md](TROUBLESHOOTING.md) se a stack não aparecer no Portainer).
 
+**Studio não abre no navegador** (mensagem tipo "Não é possível acessar esse site"):
+
+Na prática costuma ser **DNS**, **firewall** (80/443), **stack sem réplicas saudáveis** (0/1), **Let's Encrypt** ou **Docker CLI apontando para outro daemon** — não falta de flag do Remotion: o `docker-stack-remotion.yml` já usa `--ipv4` e `--host 0.0.0.0` no Studio, como recomenda a [documentação oficial de deploy do Studio](https://www.remotion.dev/docs/studio/deploy-server). Siga a checklist em [TROUBLESHOOTING.md](TROUBLESHOOTING.md) (secção *Stack `remotion` (ou outra) invisível no Portainer e sem routers no Traefik*), que cobre `dig`, `docker stack services remotion`, `SWARM_DEPLOY_FORCE_LOCAL=1`, etc.
+
 **Customizar as compositions:**
 
 ```bash
