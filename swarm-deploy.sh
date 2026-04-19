@@ -140,6 +140,19 @@ show_docker_endpoint() {
 # Guard: se DOCKER_HOST ou DOCKER_CONTEXT nao forem default, oferece forcar socket local.
 # Previne deploys "sumidos" em outro daemon (causa comum: SSH com DOCKER_CONTEXT herdado).
 ensure_local_docker() {
+    # Sessoes SSH com DOCKER_CONTEXT remoto herdado: forcar socket local sem prompt (CI / automacao)
+    if [ "${SWARM_DEPLOY_FORCE_LOCAL:-}" = "1" ]; then
+        unset DOCKER_HOST
+        export DOCKER_CONTEXT=default
+        print_info "SWARM_DEPLOY_FORCE_LOCAL=1: usando DOCKER_CONTEXT=default (socket local)."
+        show_docker_endpoint
+        if ! docker info 2>/dev/null | grep -q "Swarm: active"; then
+            print_error "Swarm nao esta ativo no socket local. Execute ./swarm-init.sh"
+            exit 1
+        fi
+        return 0
+    fi
+
     show_docker_endpoint
     local ctx="${DOCKER_CONTEXT:-$(docker context show 2>/dev/null || echo default)}"
     if [ -z "$DOCKER_HOST" ] && [ "$ctx" = "default" ]; then
@@ -538,7 +551,10 @@ case $DEPLOY_OPTION in
             ensure_remotion_image
         fi
 
-        # Deploy da stack
+        # Deploy da stack (reimprime endpoint para o log deixar claro em qual daemon roda)
+        print_header "Confirmacao do endpoint antes do deploy"
+        show_docker_endpoint
+        print_info "Comando: docker stack deploy -c ${STACK_FILE} --with-registry-auth ${STACK_NAME}"
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
         docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
 
