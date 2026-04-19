@@ -229,7 +229,7 @@ Gera vídeos programaticamente via [Remotion](https://www.remotion.dev/) (framew
 
 **Arquitetura:**
 
-- `remotion-studio` — UI web em `https://remotion.${DOMAIN}` (editor visual das compositions), protegido por BasicAuth do Traefik (reutiliza `TRAEFIK_USER`).
+- `remotion-studio` — UI web em `https://remotion.${DOMAIN}` (editor visual das compositions), protegido por BasicAuth (`REMOTION_BASIC_AUTH` no `.env`, separado do `TRAEFIK_USER` do dashboard).
 - `remotion-render` — API Express (`POST /renders`, `GET /renders/:id`, `GET /health`) em `./remotion/server/`, com render via `@remotion/renderer` e upload do MP4 para o MinIO (variáveis `S3_*` injetadas pela stack). **Sem rota Traefik**; acessível apenas na rede overlay `remotion_internal`.
 - `minio` — Storage S3-compatível. Console em `https://minio.${DOMAIN}`, API em `https://s3.${DOMAIN}`.
 - `minio-setup` — Init container (`minio/mc`) que cria o bucket `remotion` na primeira subida.

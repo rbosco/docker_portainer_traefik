@@ -49,6 +49,76 @@ _upsert_env() {
     fi
 }
 
+# Substitui uma chave no .env sem sed (valores com /, $, & seguros) e exporta.
+_append_env_kv() {
+    local k="$1" v="$2"
+    grep -v "^${k}=" .env >".env.tmp.append.$$" 2>/dev/null || cp .env ".env.tmp.append.$$"
+    mv ".env.tmp.append.$$" .env
+    printf '%s=%s\n' "$k" "$v" >> .env
+    export "${k}=${v}"
+}
+
+# Grava REMOTION_BASIC_AUTH no .env com $$ (Compose); exporta valor raw (um $ por segmento htpasswd).
+_upsert_remotion_basic_auth_htpasswd() {
+    local raw="$1"
+    local esc=${raw//\$/\$\$}
+    grep -v "^REMOTION_BASIC_AUTH=" .env >".env.tmp.remotionauth.$$" 2>/dev/null || cp .env ".env.tmp.remotionauth.$$"
+    mv ".env.tmp.remotionauth.$$" .env
+    printf '%s\n' "REMOTION_BASIC_AUTH=${esc}" >> .env
+    export REMOTION_BASIC_AUTH="$raw"
+}
+
+# Defaults Remotion Studio (BasicAuth) e MinIO: admin / admin123.
+ensure_remotion_minio_defaults() {
+    if ! command -v htpasswd >/dev/null 2>&1; then
+        print_error "htpasswd nao encontrado. Instale: apt-get install -y apache2-utils"
+        exit 1
+    fi
+    if [ -z "${REMOTION_BASIC_AUTH:-}" ]; then
+        local raw
+        raw=$(htpasswd -nb admin admin123)
+        _upsert_remotion_basic_auth_htpasswd "$raw"
+        print_info "REMOTION_BASIC_AUTH definido (admin / admin123) e gravado no .env"
+    fi
+    if [ -z "${MINIO_ROOT_USER:-}" ]; then
+        _upsert_env "MINIO_ROOT_USER" "admin"
+        print_info "MINIO_ROOT_USER definido (admin) e gravado no .env"
+    fi
+    if [ -z "${MINIO_ROOT_PASSWORD:-}" ] || [ "$MINIO_ROOT_PASSWORD" = "change_this_strong_minio_password" ]; then
+        _upsert_env "MINIO_ROOT_PASSWORD" "admin123"
+        print_info "MINIO_ROOT_PASSWORD definido (admin123) e gravado no .env"
+    fi
+}
+
+# Pergunta usuario/senha Remotion Studio (BasicAuth) e MinIO; Enter = admin / admin123.
+prompt_remotion_minio_credentials() {
+    if ! command -v htpasswd >/dev/null 2>&1; then
+        print_error "htpasswd nao encontrado. Instale: apt-get install -y apache2-utils"
+        exit 1
+    fi
+    print_header "Credenciais Remotion Studio e MinIO"
+    print_info "Remotion Studio usa BasicAuth separado do TRAEFIK_USER (dashboard Traefik)."
+    print_info "Pressione Enter em cada campo para usar o valor entre [colchetes]."
+    local ru rp mu mp raw
+    read -p "Usuario Remotion Studio [admin]: " ru
+    ru=${ru:-admin}
+    read -sp "Senha Remotion Studio [admin123]: " rp
+    echo ""
+    rp=${rp:-admin123}
+    read -p "Usuario MinIO [admin]: " mu
+    mu=${mu:-admin}
+    read -sp "Senha MinIO [admin123]: " mp
+    echo ""
+    mp=${mp:-admin123}
+
+    raw=$(htpasswd -nb "$ru" "$rp")
+    _upsert_remotion_basic_auth_htpasswd "$raw"
+    _append_env_kv "MINIO_ROOT_USER" "$mu"
+    _append_env_kv "MINIO_ROOT_PASSWORD" "$mp"
+
+    print_success "Credenciais gravadas: Remotion Studio ($ru) | MinIO ($mu)"
+}
+
 # Se DOMAIN ja estiver configurado no .env (nao vazio e diferente de 'localhost'),
 # usa o valor atual sem perguntar. Caso contrario, solicita ao usuario e grava no .env.
 ensure_domain() {
@@ -463,22 +533,15 @@ case $STACK_CHOICE in
             _remotion_upsert_env "SUBDOMAIN_S3" "s3"
             print_info "SUBDOMAIN_S3 definido (s3) e gravado no .env"
         fi
-        if [ -z "$MINIO_ROOT_USER" ]; then
-            _remotion_upsert_env "MINIO_ROOT_USER" "admin"
-            print_info "MINIO_ROOT_USER definido (admin) e gravado no .env"
-        fi
-        if [ -z "$MINIO_ROOT_PASSWORD" ] || [ "$MINIO_ROOT_PASSWORD" = "change_this_strong_minio_password" ]; then
-            MINIO_ROOT_PASSWORD=$(openssl rand -base64 24 2>/dev/null | tr -d '/+=' | head -c 32 || head -c 32 /dev/urandom | xxd -p -c 256 2>/dev/null | head -c 32)
-            _remotion_upsert_env "MINIO_ROOT_PASSWORD" "$MINIO_ROOT_PASSWORD"
-            print_info "MINIO_ROOT_PASSWORD gerada e salva no .env"
-        fi
+        ensure_remotion_minio_defaults
+
         if [ -z "$REMOTION_S3_BUCKET" ]; then
             _remotion_upsert_env "REMOTION_S3_BUCKET" "remotion"
             print_info "REMOTION_S3_BUCKET definido (remotion) e gravado no .env"
         fi
 
         # Validar vars obrigatórias
-        REMOTION_VARS=("SUBDOMAIN_REMOTION" "SUBDOMAIN_MINIO" "SUBDOMAIN_S3" "MINIO_ROOT_USER" "MINIO_ROOT_PASSWORD" "REMOTION_S3_BUCKET")
+        REMOTION_VARS=("SUBDOMAIN_REMOTION" "SUBDOMAIN_MINIO" "SUBDOMAIN_S3" "REMOTION_BASIC_AUTH" "MINIO_ROOT_USER" "MINIO_ROOT_PASSWORD" "REMOTION_S3_BUCKET")
         for var in "${REMOTION_VARS[@]}"; do
             if [ -z "${!var}" ]; then
                 print_error "Variável $var continua vazia após tentativa de preenchimento"
@@ -547,6 +610,13 @@ case $DEPLOY_OPTION in
 
         # Remotion precisa do projeto clonado e da imagem local antes do deploy
         if [ "$STACK_NAME" = "remotion" ]; then
+            read -p "Definir usuario e senha (Remotion Studio + MinIO) agora? [S/n]: " REMOTION_CFG
+            REMOTION_CFG=${REMOTION_CFG:-S}
+            if [[ "$REMOTION_CFG" =~ ^[Ss]$ ]]; then
+                prompt_remotion_minio_credentials
+            else
+                print_info "Mantendo credenciais do .env (defaults admin/admin123 se ainda nao existirem)."
+            fi
             ensure_remotion_repo
             ensure_remotion_image
         fi
@@ -639,7 +709,7 @@ case $DEPLOY_OPTION in
         elif [ "$STACK_NAME" = "remotion" ]; then
             echo -e "${BLUE}Remotion Studio:${NC}"
             echo -e "  URL: ${YELLOW}https://${SUBDOMAIN_REMOTION:-remotion}.${DOMAIN}${NC}"
-            echo -e "  ${YELLOW}Protegido por BasicAuth (mesmo TRAEFIK_USER)${NC}"
+            echo -e "  ${YELLOW}Protegido por BasicAuth (REMOTION_BASIC_AUTH no .env)${NC}"
             echo
             echo -e "${BLUE}Remotion Render API (interno, sem rota Traefik):${NC}"
             echo -e "  Endpoint: ${YELLOW}http://remotion-render:3000${NC} (via rede overlay 'remotion_internal')"

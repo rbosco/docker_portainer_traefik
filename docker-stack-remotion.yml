@@ -6,8 +6,9 @@
 # e constroi a imagem local 'remotion-local:latest' (node:22-bookworm-slim +
 # Chrome Headless Shell + projeto Remotion).
 #
-# Configure no .env: DOMAIN, TRAEFIK_USER, SUBDOMAIN_REMOTION, SUBDOMAIN_MINIO,
-# SUBDOMAIN_S3, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, REMOTION_S3_BUCKET.
+# Configure no .env: DOMAIN, TRAEFIK_USER (dashboard Traefik), REMOTION_BASIC_AUTH
+# (BasicAuth do Studio), SUBDOMAIN_REMOTION, SUBDOMAIN_MINIO, SUBDOMAIN_S3,
+# MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, REMOTION_S3_BUCKET.
 #
 # Notas:
 # - 'remotion-local:latest' so existe no node manager (sem registry).
@@ -68,7 +69,7 @@ services:
         # Middlewares
         - "traefik.http.middlewares.remotion-https-redirect.redirectscheme.scheme=https"
         - "traefik.http.middlewares.remotion-https-redirect.redirectscheme.permanent=true"
-        - "traefik.http.middlewares.remotion-auth.basicauth.users=${TRAEFIK_USER}"
+        - "traefik.http.middlewares.remotion-auth.basicauth.users=${REMOTION_BASIC_AUTH}"
         # Service
         - "traefik.http.services.remotion.loadbalancer.server.port=3000"
 
