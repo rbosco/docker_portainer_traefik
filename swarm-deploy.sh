@@ -99,6 +99,23 @@ ensure_remotion_repo() {
     print_info "Customize ./remotion/src/ com suas proprias compositions antes de produzir videos reais."
 }
 
+# Alinha DOCKER_API_VERSION com a maior API suportada pelo daemon.
+# Resolve o erro "client version X.Y is too new. Maximum supported API version is Z"
+# quando o CLI eh mais novo que o dockerd da VPS.
+ensure_docker_api_compat() {
+    local server_api
+    server_api=$(docker version --format '{{.Server.APIVersion}}' 2>/dev/null || true)
+    if [ -z "$server_api" ]; then
+        return 0
+    fi
+    if [ -n "$DOCKER_API_VERSION" ]; then
+        print_info "DOCKER_API_VERSION ja definido: $DOCKER_API_VERSION (server: $server_api)"
+        return 0
+    fi
+    export DOCKER_API_VERSION="$server_api"
+    print_info "DOCKER_API_VERSION=$server_api (alinhado com o daemon)"
+}
+
 # Remotion: buildar imagem local a partir de ./remotion/Dockerfile.
 ensure_remotion_image() {
     if [ ! -f remotion/Dockerfile ]; then
@@ -114,8 +131,36 @@ ensure_remotion_image() {
         fi
     fi
     print_info "Buildando 'remotion-local:latest' a partir de ./remotion (pode demorar 5-10 min na 1a vez)..."
-    docker build -t remotion-local:latest ./remotion
-    print_success "Imagem 'remotion-local:latest' construida"
+
+    local build_log
+    build_log=$(mktemp 2>/dev/null || echo "/tmp/remotion-build-$$.log")
+    if docker build -t remotion-local:latest ./remotion 2>&1 | tee "$build_log"; then
+        rm -f "$build_log"
+        print_success "Imagem 'remotion-local:latest' construida"
+        return 0
+    fi
+
+    # Fallback: CLI mais novo que daemon? Detectar e refazer com DOCKER_API_VERSION.
+    if grep -q "client version .* is too new" "$build_log" 2>/dev/null; then
+        print_warning "Docker CLI e mais novo que o daemon. Tentando alinhar DOCKER_API_VERSION..."
+        ensure_docker_api_compat
+        if [ -n "$DOCKER_API_VERSION" ]; then
+            print_info "Re-tentando build com DOCKER_API_VERSION=$DOCKER_API_VERSION..."
+            if docker build -t remotion-local:latest ./remotion; then
+                rm -f "$build_log"
+                print_success "Imagem 'remotion-local:latest' construida"
+                print_warning "Recomendacao: atualize o Docker Engine (curl -fsSL https://get.docker.com | sh)"
+                return 0
+            fi
+        fi
+    fi
+
+    rm -f "$build_log"
+    print_error "Falha ao buildar 'remotion-local:latest'"
+    print_info "Verifique: docker version  (compare Client vs Server)"
+    print_info "Workaround: export DOCKER_API_VERSION=\$(docker version --format '{{.Server.APIVersion}}')"
+    print_info "Fix definitivo: atualize o Docker Engine na VPS"
+    exit 1
 }
 
 # Banner
@@ -141,6 +186,9 @@ if ! docker info 2>/dev/null | grep -q "Swarm: active"; then
 fi
 
 print_success "Docker Swarm ativo"
+
+# Alinhar API version (resolve mismatch cliente novo x daemon antigo)
+ensure_docker_api_compat
 
 # Verificar se é manager
 if ! docker node ls &>/dev/null; then
