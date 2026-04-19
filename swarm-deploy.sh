@@ -75,6 +75,49 @@ ensure_traefik_stack_host_paths() {
     print_success "Caminhos locais Traefik/Portainer OK (data/traefik, data/portainer)"
 }
 
+# Remotion: clonar template oficial se ./remotion ainda nao existir.
+# Fonte: https://github.com/remotion-dev/template-render-server
+ensure_remotion_repo() {
+    if [ -d remotion/.git ] || [ -f remotion/Dockerfile ]; then
+        print_success "Projeto ./remotion ja existe (nao sera sobrescrito)"
+        return 0
+    fi
+    print_warning "Pasta ./remotion nao encontrada."
+    print_info "Fonte: https://github.com/remotion-dev/template-render-server (Express + Studio + Dockerfile)"
+    read -p "Clonar o template oficial em ./remotion agora? [S/n]: " CLONE_CHOICE
+    CLONE_CHOICE=${CLONE_CHOICE:-S}
+    if [[ ! "$CLONE_CHOICE" =~ ^[Ss]$ ]]; then
+        print_error "Projeto Remotion e necessario para buildar a imagem. Abortando."
+        exit 1
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+        print_error "git nao encontrado no PATH. Instale git e tente novamente."
+        exit 1
+    fi
+    git clone --depth 1 https://github.com/remotion-dev/template-render-server remotion
+    print_success "Template clonado em ./remotion"
+    print_info "Customize ./remotion/src/ com suas proprias compositions antes de produzir videos reais."
+}
+
+# Remotion: buildar imagem local a partir de ./remotion/Dockerfile.
+ensure_remotion_image() {
+    if [ ! -f remotion/Dockerfile ]; then
+        print_error "remotion/Dockerfile nao encontrado (o template oficial ja traz um)."
+        exit 1
+    fi
+    if docker image inspect remotion-local:latest >/dev/null 2>&1; then
+        read -p "Imagem 'remotion-local:latest' ja existe. Rebuildar? [s/N]: " REBUILD
+        REBUILD=${REBUILD:-N}
+        if [[ ! "$REBUILD" =~ ^[Ss]$ ]]; then
+            print_info "Usando imagem existente 'remotion-local:latest'"
+            return 0
+        fi
+    fi
+    print_info "Buildando 'remotion-local:latest' a partir de ./remotion (pode demorar 5-10 min na 1a vez)..."
+    docker build -t remotion-local:latest ./remotion
+    print_success "Imagem 'remotion-local:latest' construida"
+}
+
 # Banner
 clear
 echo -e "${BLUE}"
@@ -152,6 +195,7 @@ echo -e "${YELLOW}Qual stack deseja gerenciar?${NC}"
 echo "1) Traefik + Portainer (Infraestrutura)"
 echo "2) WordPress"
 echo "3) n8n (Automação de Workflows)"
+echo "4) Remotion + MinIO (Studio + Render + Storage S3)"
 echo
 read -p "Stack [1]: " STACK_CHOICE
 STACK_CHOICE=${STACK_CHOICE:-1}
@@ -264,6 +308,71 @@ case $STACK_CHOICE in
         mkdir -p data/n8n
         print_success "Diretórios verificados"
         ;;
+    4)
+        STACK_NAME="remotion"
+        STACK_FILE="docker-stack-remotion.yml"
+        STACK_DESCRIPTION="Remotion + MinIO (Studio + Render + Storage S3)"
+
+        # Verificar se a stack traefik está rodando
+        if ! docker stack ls | grep -q "traefik"; then
+            print_error "A stack Traefik precisa estar rodando antes do Remotion"
+            print_info "Execute primeiro o deploy do Traefik (opção 1)"
+            exit 1
+        fi
+
+        # Upsert helper (reusa lógica igual ao WordPress)
+        _remotion_upsert_env() {
+            local k="$1" v="$2"
+            export "${k}=${v}"
+            if grep -q "^${k}=" .env 2>/dev/null; then
+                sed -i.bak "s#^${k}=.*#${k}=${v}#" .env
+            else
+                echo "${k}=${v}" >> .env
+            fi
+        }
+
+        # Defaults de subdomínios
+        if [ -z "$SUBDOMAIN_REMOTION" ]; then
+            _remotion_upsert_env "SUBDOMAIN_REMOTION" "remotion"
+            print_info "SUBDOMAIN_REMOTION definido (remotion) e gravado no .env"
+        fi
+        if [ -z "$SUBDOMAIN_MINIO" ]; then
+            _remotion_upsert_env "SUBDOMAIN_MINIO" "minio"
+            print_info "SUBDOMAIN_MINIO definido (minio) e gravado no .env"
+        fi
+        if [ -z "$SUBDOMAIN_S3" ]; then
+            _remotion_upsert_env "SUBDOMAIN_S3" "s3"
+            print_info "SUBDOMAIN_S3 definido (s3) e gravado no .env"
+        fi
+        if [ -z "$MINIO_ROOT_USER" ]; then
+            _remotion_upsert_env "MINIO_ROOT_USER" "admin"
+            print_info "MINIO_ROOT_USER definido (admin) e gravado no .env"
+        fi
+        if [ -z "$MINIO_ROOT_PASSWORD" ] || [ "$MINIO_ROOT_PASSWORD" = "change_this_strong_minio_password" ]; then
+            MINIO_ROOT_PASSWORD=$(openssl rand -base64 24 2>/dev/null | tr -d '/+=' | head -c 32 || head -c 32 /dev/urandom | xxd -p -c 256 2>/dev/null | head -c 32)
+            _remotion_upsert_env "MINIO_ROOT_PASSWORD" "$MINIO_ROOT_PASSWORD"
+            print_info "MINIO_ROOT_PASSWORD gerada e salva no .env"
+        fi
+        if [ -z "$REMOTION_S3_BUCKET" ]; then
+            _remotion_upsert_env "REMOTION_S3_BUCKET" "remotion"
+            print_info "REMOTION_S3_BUCKET definido (remotion) e gravado no .env"
+        fi
+
+        # Validar vars obrigatórias
+        REMOTION_VARS=("SUBDOMAIN_REMOTION" "SUBDOMAIN_MINIO" "SUBDOMAIN_S3" "MINIO_ROOT_USER" "MINIO_ROOT_PASSWORD" "REMOTION_S3_BUCKET")
+        for var in "${REMOTION_VARS[@]}"; do
+            if [ -z "${!var}" ]; then
+                print_error "Variável $var continua vazia após tentativa de preenchimento"
+                exit 1
+            fi
+        done
+
+        # Nota: ensure_remotion_repo + ensure_remotion_image rodam no case Deploy (DEPLOY_OPTION=1).
+
+        # Diretórios (futuro: logs locais; volume MinIO é nomeado)
+        mkdir -p data/remotion
+        print_success "Diretórios verificados"
+        ;;
     *)
         print_error "Opção inválida"
         exit 1
@@ -312,6 +421,12 @@ case $DEPLOY_OPTION in
 
         if [ "$STACK_NAME" = "traefik" ]; then
             ensure_traefik_stack_host_paths
+        fi
+
+        # Remotion precisa do projeto clonado e da imagem local antes do deploy
+        if [ "$STACK_NAME" = "remotion" ]; then
+            ensure_remotion_repo
+            ensure_remotion_image
         fi
 
         # Deploy da stack
@@ -384,6 +499,32 @@ case $DEPLOY_OPTION in
             echo
             print_warning "Certifique-se de que o DNS está configurado:"
             echo -e "  ${YELLOW}${SUBDOMAIN_N8N:-n8n}.${DOMAIN}${NC} → IP do servidor"
+        elif [ "$STACK_NAME" = "remotion" ]; then
+            echo -e "${BLUE}Remotion Studio:${NC}"
+            echo -e "  URL: ${YELLOW}https://${SUBDOMAIN_REMOTION:-remotion}.${DOMAIN}${NC}"
+            echo -e "  ${YELLOW}Protegido por BasicAuth (mesmo TRAEFIK_USER)${NC}"
+            echo
+            echo -e "${BLUE}Remotion Render API (interno, sem rota Traefik):${NC}"
+            echo -e "  Endpoint: ${YELLOW}http://remotion-render:3000${NC} (via rede overlay 'remotion_internal')"
+            echo -e "  Rotas: ${YELLOW}POST /renders${NC} e ${YELLOW}GET /renders/:id${NC}"
+            echo
+            echo -e "${BLUE}MinIO Console:${NC}"
+            echo -e "  URL: ${YELLOW}https://${SUBDOMAIN_MINIO:-minio}.${DOMAIN}${NC}"
+            echo -e "  Usuário: ${YELLOW}${MINIO_ROOT_USER}${NC}"
+            echo -e "  Senha: ${YELLOW}(definida em MINIO_ROOT_PASSWORD no .env)${NC}"
+            echo
+            echo -e "${BLUE}MinIO API S3:${NC}"
+            echo -e "  Endpoint: ${YELLOW}https://${SUBDOMAIN_S3:-s3}.${DOMAIN}${NC}"
+            echo -e "  Bucket: ${YELLOW}${REMOTION_S3_BUCKET:-remotion}${NC}"
+            echo
+            print_warning "Certifique-se de que os DNS estão configurados:"
+            echo -e "  ${YELLOW}${SUBDOMAIN_REMOTION:-remotion}.${DOMAIN}${NC} → IP do servidor"
+            echo -e "  ${YELLOW}${SUBDOMAIN_MINIO:-minio}.${DOMAIN}${NC} → IP do servidor"
+            echo -e "  ${YELLOW}${SUBDOMAIN_S3:-s3}.${DOMAIN}${NC} → IP do servidor"
+            echo
+            print_info "Para integrar o n8n com a API de render:"
+            echo -e "  ${YELLOW}docker network connect remotion_internal \$(docker ps -qf name=n8n_n8n | head -1)${NC}"
+            echo -e "  No n8n: HTTP Request → POST http://remotion-render:3000/renders"
         fi
         echo
         ;;
@@ -481,6 +622,23 @@ case $DEPLOY_OPTION in
             esac
         elif [ "$STACK_NAME" = "n8n" ]; then
             SERVICE="n8n"
+        elif [ "$STACK_NAME" = "remotion" ]; then
+            echo -e "${YELLOW}Escolha o serviço:${NC}"
+            echo "1) Remotion Studio"
+            echo "2) Remotion Render (API)"
+            echo "3) MinIO"
+            echo "4) MinIO Setup (bucket init)"
+            echo
+            read -p "Opção [1]: " SERVICE_OPTION
+            SERVICE_OPTION=${SERVICE_OPTION:-1}
+
+            case $SERVICE_OPTION in
+                1) SERVICE="remotion-studio" ;;
+                2) SERVICE="remotion-render" ;;
+                3) SERVICE="minio" ;;
+                4) SERVICE="minio-setup" ;;
+                *) SERVICE="remotion-studio" ;;
+            esac
         fi
 
         print_info "Exibindo logs do serviço: ${STACK_NAME}_${SERVICE}"
@@ -499,6 +657,9 @@ case $DEPLOY_OPTION in
             echo "  - Remover a rede 'proxy'"
         elif [ "$STACK_NAME" = "n8n" ]; then
             echo "  - Remover os volumes n8n_n8n_data e n8n_postgres_data (workflows e banco Postgres)"
+        elif [ "$STACK_NAME" = "remotion" ]; then
+            echo "  - Remover o volume remotion_minio_data (todos os MP4s armazenados no MinIO)"
+            echo "  - Opcionalmente remover ./remotion (projeto clonado) e a imagem remotion-local:latest"
         fi
         echo "  ${RED}TODOS OS DADOS SERÃO PERDIDOS!${NC}"
         echo
@@ -537,6 +698,8 @@ case $DEPLOY_OPTION in
                 docker volume rm wordpress_redis-data 2>/dev/null || true
             elif [ "$STACK_NAME" = "n8n" ]; then
                 docker volume rm n8n_n8n_data n8n_postgres_data 2>/dev/null || true
+            elif [ "$STACK_NAME" = "remotion" ]; then
+                docker volume rm remotion_minio_data 2>/dev/null || true
             fi
 
             print_success "Volumes antigos limpos (se existiam)"
@@ -570,6 +733,18 @@ case $DEPLOY_OPTION in
                     rm -rf data/n8n/*
                     print_success "Dados locais removidos"
                 fi
+            elif [ "$STACK_NAME" = "remotion" ]; then
+                print_warning "Remover pasta ./remotion (projeto clonado do template)?"
+                read -p "Digite 'SIM' para confirmar: " CONFIRM_DATA
+                if [ "$CONFIRM_DATA" = "SIM" ]; then
+                    rm -rf remotion
+                    print_success "Pasta ./remotion removida"
+                fi
+                print_warning "Remover imagem local 'remotion-local:latest'?"
+                read -p "Digite 'SIM' para confirmar: " CONFIRM_IMG
+                if [ "$CONFIRM_IMG" = "SIM" ]; then
+                    docker image rm remotion-local:latest 2>/dev/null && print_success "Imagem removida" || print_warning "Imagem não encontrada"
+                fi
             fi
 
             # Remover rede (apenas para traefik)
@@ -598,6 +773,12 @@ print_info "Comandos úteis:"
 echo "  Ver serviços: ${YELLOW}docker stack services $STACK_NAME${NC}"
 if [ "$STACK_NAME" = "n8n" ]; then
     echo "  Logs n8n: ${YELLOW}docker service logs -f ${STACK_NAME}_n8n${NC}"
+elif [ "$STACK_NAME" = "remotion" ]; then
+    echo "  Logs Studio:  ${YELLOW}docker service logs -f ${STACK_NAME}_remotion-studio${NC}"
+    echo "  Logs Render:  ${YELLOW}docker service logs -f ${STACK_NAME}_remotion-render${NC}"
+    echo "  Logs MinIO:   ${YELLOW}docker service logs -f ${STACK_NAME}_minio${NC}"
+    echo "  Rebuild img:  ${YELLOW}docker build -t remotion-local:latest ./remotion${NC}"
+    echo "  Update stack: ${YELLOW}docker service update --force ${STACK_NAME}_remotion-studio${NC}"
 else
     echo "  Ver logs: ${YELLOW}docker service logs -f ${STACK_NAME}_traefik${NC}"
     echo "  Escalar serviço: ${YELLOW}docker service scale ${STACK_NAME}_portainer=2${NC}"
