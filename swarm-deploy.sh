@@ -38,6 +38,35 @@ print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
 }
 
+# Helper global: cria ou atualiza uma chave no .env e exporta no shell atual.
+_upsert_env() {
+    local k="$1" v="$2"
+    export "${k}=${v}"
+    if grep -q "^${k}=" .env 2>/dev/null; then
+        sed -i.bak "s#^${k}=.*#${k}=${v}#" .env
+    else
+        echo "${k}=${v}" >> .env
+    fi
+}
+
+# Se DOMAIN ja estiver configurado no .env (nao vazio e diferente de 'localhost'),
+# usa o valor atual sem perguntar. Caso contrario, solicita ao usuario e grava no .env.
+ensure_domain() {
+    local current="${DOMAIN:-}"
+    if [ -n "$current" ] && [ "$current" != "localhost" ]; then
+        print_success "DOMAIN=${current} (usando valor do .env)"
+        return 0
+    fi
+    print_warning "DOMAIN nao configurado no .env (vazio ou 'localhost')"
+    read -p "Informe o dominio principal (ex.: exemplo.com): " NEW_DOMAIN
+    if [ -z "$NEW_DOMAIN" ] || [ "$NEW_DOMAIN" = "localhost" ]; then
+        print_error "DOMAIN invalido. Informe um dominio real."
+        exit 1
+    fi
+    _upsert_env "DOMAIN" "$NEW_DOMAIN"
+    print_success "DOMAIN=${NEW_DOMAIN} gravado no .env"
+}
+
 # docker-stack*.yml usa rede externa nome exato "proxy" (overlay Swarm).
 # "docker network ls | grep proxy" dá falso positivo (ex.: docker_portainer_traefik_proxy).
 ensure_swarm_proxy_network() {
@@ -267,15 +296,7 @@ case $STACK_CHOICE in
         fi
 
         # WordPress: defaults + passwords seguras se faltar (ver .env.example secção WordPress)
-        _wp_upsert_env() {
-            local k="$1" v="$2"
-            export "${k}=${v}"
-            if grep -q "^${k}=" .env 2>/dev/null; then
-                sed -i.bak "s#^${k}=.*#${k}=${v}#" .env
-            else
-                echo "${k}=${v}" >> .env
-            fi
-        }
+        _wp_upsert_env() { _upsert_env "$@"; }
         if [ -z "$WORDPRESS_DB_NAME" ]; then
             _wp_upsert_env "WORDPRESS_DB_NAME" "wordpress"
             print_info "WORDPRESS_DB_NAME definido (wordpress) e gravado no .env"
@@ -368,16 +389,8 @@ case $STACK_CHOICE in
             exit 1
         fi
 
-        # Upsert helper (reusa lógica igual ao WordPress)
-        _remotion_upsert_env() {
-            local k="$1" v="$2"
-            export "${k}=${v}"
-            if grep -q "^${k}=" .env 2>/dev/null; then
-                sed -i.bak "s#^${k}=.*#${k}=${v}#" .env
-            else
-                echo "${k}=${v}" >> .env
-            fi
-        }
+        # Upsert helper (reusa _upsert_env global)
+        _remotion_upsert_env() { _upsert_env "$@"; }
 
         # Defaults de subdomínios
         if [ -z "$SUBDOMAIN_REMOTION" ]; then
@@ -444,6 +457,9 @@ case $DEPLOY_OPTION in
     1)
         # Deploy
         print_header "Fazendo Deploy da Stack"
+
+        # Confirmar / solicitar DOMAIN (apenas se .env nao tiver um dominio valido)
+        ensure_domain
 
         # Verificar se stack já existe
         if docker stack ls | grep -q "$STACK_NAME"; then
