@@ -23,6 +23,9 @@
 services:
   remotion-studio:
     image: remotion-local:latest
+    volumes:
+      - /opt/remotion/src:/app/src
+      - /opt/remotion/server:/app/server
     command: ["npm", "run", "remotion:studio", "--", "--ipv4", "--host", "0.0.0.0"]
     environment:
       - NODE_ENV=production
