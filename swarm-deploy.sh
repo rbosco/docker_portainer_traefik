@@ -128,6 +128,48 @@ ensure_remotion_repo() {
     print_info "Customize ./remotion/src/ com suas proprias compositions antes de produzir videos reais."
 }
 
+# Mostra contexto/endpoint Docker ativo para evitar deploy em daemon errado.
+show_docker_endpoint() {
+    local ctx host
+    ctx=$(docker context show 2>/dev/null || echo default)
+    host=$(docker context inspect "$ctx" --format '{{.Endpoints.docker.Host}}' 2>/dev/null)
+    [ -n "$DOCKER_HOST" ] && host="$DOCKER_HOST (via DOCKER_HOST)"
+    print_info "Docker context: ${ctx} | endpoint: ${host:-unix:///var/run/docker.sock}"
+}
+
+# Guard: se DOCKER_HOST ou DOCKER_CONTEXT nao forem default, oferece forcar socket local.
+# Previne deploys "sumidos" em outro daemon (causa comum: SSH com DOCKER_CONTEXT herdado).
+ensure_local_docker() {
+    show_docker_endpoint
+    local ctx="${DOCKER_CONTEXT:-$(docker context show 2>/dev/null || echo default)}"
+    if [ -z "$DOCKER_HOST" ] && [ "$ctx" = "default" ]; then
+        return 0
+    fi
+    print_warning "Docker CLI aponta para endpoint NAO-local."
+    print_warning "'docker stack deploy' subira a stack NESSE endpoint, nao no host atual."
+    echo
+    echo "1) Continuar assim mesmo (deploy no endpoint remoto)"
+    echo "2) Forcar socket local (unset DOCKER_HOST, DOCKER_CONTEXT=default) e revalidar"
+    echo "3) Abortar"
+    read -p "Opcao [2]: " CTX_CHOICE
+    CTX_CHOICE=${CTX_CHOICE:-2}
+    case $CTX_CHOICE in
+        1) print_warning "Prosseguindo com endpoint remoto" ;;
+        2)
+            unset DOCKER_HOST
+            export DOCKER_CONTEXT=default
+            print_info "Reavaliando Swarm no socket local..."
+            if ! docker info 2>/dev/null | grep -q "Swarm: active"; then
+                print_error "Swarm nao esta ativo no socket local. Execute ./swarm-init.sh"
+                exit 1
+            fi
+            show_docker_endpoint
+            print_success "Usando socket local (default)"
+            ;;
+        *) print_info "Abortado"; exit 0 ;;
+    esac
+}
+
 # Alinha DOCKER_API_VERSION com a maior API suportada pelo daemon.
 # Resolve o erro "client version X.Y is too new. Maximum supported API version is Z"
 # quando o CLI eh mais novo que o dockerd da VPS.
@@ -215,6 +257,9 @@ if ! docker info 2>/dev/null | grep -q "Swarm: active"; then
 fi
 
 print_success "Docker Swarm ativo"
+
+# Guard: confirmar que o CLI aponta para o daemon local (evita deploy em outro host)
+ensure_local_docker
 
 # Alinhar API version (resolve mismatch cliente novo x daemon antigo)
 ensure_docker_api_compat
@@ -497,7 +542,13 @@ case $DEPLOY_OPTION in
         print_info "Fazendo deploy da stack '$STACK_NAME'..."
         docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
 
-        print_success "Stack deployed!"
+        if ! docker stack ls --format '{{.Name}}' | grep -qx "$STACK_NAME"; then
+            print_error "Stack '$STACK_NAME' nao aparece em 'docker stack ls' no endpoint atual."
+            print_info "Verifique DOCKER_CONTEXT/DOCKER_HOST e se este eh o mesmo daemon onde Traefik/Portainer rodam."
+            show_docker_endpoint
+            exit 1
+        fi
+        print_success "Stack '$STACK_NAME' criada no daemon atual"
 
         # Aguardar serviços
         print_header "Aguardando Serviços"
@@ -509,6 +560,12 @@ case $DEPLOY_OPTION in
         echo
         docker stack services "$STACK_NAME"
         echo
+
+        if docker stack services "$STACK_NAME" --format '{{.Replicas}}' | grep -q '^0/'; then
+            print_warning "Algum servico esta com 0 replicas. Investigue com:"
+            echo -e "  ${YELLOW}docker stack ps $STACK_NAME --no-trunc${NC}"
+            echo
+        fi
 
         # Informações de acesso
         print_header "Informações de Acesso"
