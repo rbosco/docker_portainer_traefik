@@ -1,0 +1,210 @@
+# Stack Remotion (Studio + Render worker) + MinIO (S3 storage) para Docker Swarm
+# Requer: stack Traefik rodando e rede proxy (overlay) existente.
+#
+# Pre-deploy: swarm-deploy.sh clona ./remotion a partir de
+#   https://github.com/remotion-dev/template-render-server
+# e constroi a imagem local 'remotion-local:latest' (node:22-bookworm-slim +
+# Chrome Headless Shell + projeto Remotion).
+#
+# Configure no .env: DOMAIN, TRAEFIK_USER, SUBDOMAIN_REMOTION, SUBDOMAIN_MINIO,
+# SUBDOMAIN_S3, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, REMOTION_S3_BUCKET.
+#
+# Notas:
+# - 'remotion-local:latest' so existe no node manager (sem registry).
+#   Por isso os servicos usam constraint node.role==manager.
+# - remotion-render NAO expoe rota Traefik (so rede interna 'remotion_internal').
+#   n8n se conecta via: docker network connect remotion_internal <container_n8n>
+# - MinIO expoe Console (minio.DOMAIN) e API S3 (s3.DOMAIN); bucket criado pelo
+#   servico minio-setup na primeira subida.
+# - Render consome muita memoria (recomendacao oficial: 4GB+). Ajuste limits se
+#   sua VPS tiver menos RAM.
+
+services:
+  remotion-studio:
+    image: remotion-local:latest
+    command: ["npm", "run", "remotion:studio", "--", "--ipv4", "--host", "0.0.0.0"]
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - TZ=${TZ:-America/Sao_Paulo}
+    networks:
+      - proxy
+      - remotion_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+      resources:
+        reservations:
+          memory: 1G
+        limits:
+          memory: 2G
+          cpus: "2.0"
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=proxy"
+        - "traefik.swarm.network=proxy"
+        # HTTP -> redirect HTTPS
+        - "traefik.http.routers.remotion.entrypoints=http"
+        - "traefik.http.routers.remotion.rule=Host(`${SUBDOMAIN_REMOTION:-remotion}.${DOMAIN}`)"
+        - "traefik.http.routers.remotion.middlewares=remotion-https-redirect"
+        # HTTPS + BasicAuth
+        - "traefik.http.routers.remotion-secure.entrypoints=https"
+        - "traefik.http.routers.remotion-secure.rule=Host(`${SUBDOMAIN_REMOTION:-remotion}.${DOMAIN}`)"
+        - "traefik.http.routers.remotion-secure.tls=true"
+        - "traefik.http.routers.remotion-secure.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.remotion-secure.service=remotion"
+        - "traefik.http.routers.remotion-secure.middlewares=remotion-auth"
+        # Middlewares
+        - "traefik.http.middlewares.remotion-https-redirect.redirectscheme.scheme=https"
+        - "traefik.http.middlewares.remotion-https-redirect.redirectscheme.permanent=true"
+        - "traefik.http.middlewares.remotion-auth.basicauth.users=${TRAEFIK_USER}"
+        # Service
+        - "traefik.http.services.remotion.loadbalancer.server.port=3000"
+
+  remotion-render:
+    image: remotion-local:latest
+    command: ["npm", "start"]
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - TZ=${TZ:-America/Sao_Paulo}
+      - PORT=3000
+      # Integracao com MinIO (S3 compativel) - usadas apenas se o render-server
+      # do template (ou customizado) implementar upload S3.
+      - S3_ENDPOINT=http://minio:9000
+      - S3_PUBLIC_ENDPOINT=https://${SUBDOMAIN_S3:-s3}.${DOMAIN}
+      - S3_ACCESS_KEY=${MINIO_ROOT_USER}
+      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - S3_BUCKET=${REMOTION_S3_BUCKET:-remotion}
+      - S3_REGION=us-east-1
+      - S3_FORCE_PATH_STYLE=true
+    networks:
+      - remotion_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+      resources:
+        reservations:
+          memory: 2G
+        limits:
+          memory: 4G
+          cpus: "2.0"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_BROWSER_REDIRECT_URL=https://${SUBDOMAIN_MINIO:-minio}.${DOMAIN}
+      - MINIO_SERVER_URL=https://${SUBDOMAIN_S3:-s3}.${DOMAIN}
+    volumes:
+      - minio_data:/data
+    networks:
+      - proxy
+      - remotion_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+      resources:
+        reservations:
+          memory: 256M
+        limits:
+          memory: 1G
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=proxy"
+        - "traefik.swarm.network=proxy"
+        # Console (admin UI)
+        - "traefik.http.routers.minio-console.entrypoints=https"
+        - "traefik.http.routers.minio-console.rule=Host(`${SUBDOMAIN_MINIO:-minio}.${DOMAIN}`)"
+        - "traefik.http.routers.minio-console.tls=true"
+        - "traefik.http.routers.minio-console.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.minio-console.service=minio-console"
+        - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+        # API S3
+        - "traefik.http.routers.minio-api.entrypoints=https"
+        - "traefik.http.routers.minio-api.rule=Host(`${SUBDOMAIN_S3:-s3}.${DOMAIN}`)"
+        - "traefik.http.routers.minio-api.tls=true"
+        - "traefik.http.routers.minio-api.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.minio-api.service=minio-api"
+        - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
+        # Redirects HTTP -> HTTPS
+        - "traefik.http.routers.minio-console-http.entrypoints=http"
+        - "traefik.http.routers.minio-console-http.rule=Host(`${SUBDOMAIN_MINIO:-minio}.${DOMAIN}`)"
+        - "traefik.http.routers.minio-console-http.middlewares=minio-https-redirect"
+        - "traefik.http.routers.minio-api-http.entrypoints=http"
+        - "traefik.http.routers.minio-api-http.rule=Host(`${SUBDOMAIN_S3:-s3}.${DOMAIN}`)"
+        - "traefik.http.routers.minio-api-http.middlewares=minio-https-redirect"
+        - "traefik.http.middlewares.minio-https-redirect.redirectscheme.scheme=https"
+        - "traefik.http.middlewares.minio-https-redirect.redirectscheme.permanent=true"
+
+  # Cria o bucket automaticamente na primeira subida; sai apos terminar.
+  minio-setup:
+    image: minio/mc:latest
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        echo "Aguardando MinIO ficar disponivel..."
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" >/dev/null 2>&1; do
+          sleep 2
+        done
+        echo "MinIO disponivel. Criando bucket '$${REMOTION_S3_BUCKET}'..."
+        mc mb --ignore-existing "local/$${REMOTION_S3_BUCKET}"
+        mc anonymous set download "local/$${REMOTION_S3_BUCKET}" || true
+        echo "Bucket '$${REMOTION_S3_BUCKET}' pronto."
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - REMOTION_S3_BUCKET=${REMOTION_S3_BUCKET:-remotion}
+    networks:
+      - remotion_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: none
+
+volumes:
+  minio_data:
+
+networks:
+  proxy:
+    external: true
+    name: proxy
+  remotion_internal:
+    driver: overlay
+    attachable: true

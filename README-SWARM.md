@@ -17,6 +17,10 @@ Esta configuração utiliza Docker Swarm para orquestração de containers com:
 
 - **Traefik Dashboard**: `https://pr.seudominio.com`
 - **Portainer**: `https://painel.seudominio.com`
+- **n8n** (opcional): `https://n8n.seudominio.com`
+- **Remotion Studio** (opcional): `https://remotion.seudominio.com`
+- **MinIO Console** (opcional): `https://minio.seudominio.com`
+- **MinIO API S3** (opcional): `https://s3.seudominio.com`
 
 ## 📋 Pré-requisitos
 
@@ -169,6 +173,13 @@ chmod +x swarm-deploy.sh
 3. **Ver status**: Mostra status dos serviços
 4. **Ver logs**: Exibe logs de um serviço específico
 
+**Stacks suportadas:**
+
+1. Traefik + Portainer (infraestrutura)
+2. WordPress
+3. n8n (automação de workflows)
+4. Remotion + MinIO (geração de vídeos + storage S3)
+
 ### Rodar n8n no Swarm e corrigir 404
 
 O 404 ocorre quando o Traefik não encontra roteador para o host da requisição. A rota do n8n vem das **labels** do serviço; o host deve ser o mesmo do `.env`. Siga esta ordem:
@@ -211,6 +222,113 @@ Não use `docker stack deploy -c docker-stack-n8n.yml n8n` manualmente; o script
 - Significa que o Traefik encontrou a rota mas não consegue falar com o container n8n (rede diferente).
 - Confirme que existe só uma rede em uso para ambos: `docker network ls` → deve haver **proxy**. Se existir **traefik_proxy** e **proxy**, o Traefik pode estar em traefik_proxy e o n8n em proxy.
 - **Solução:** redeploy da stack **Traefik** (opção 1 → 1). O `docker-stack.yml` atual usa a rede externa "proxy"; após o redeploy, Traefik e n8n ficam na mesma rede e o 504 some.
+
+### Stack 4: Remotion + MinIO (Studio + Render + Storage S3)
+
+Gera vídeos programaticamente via [Remotion](https://www.remotion.dev/) (framework React) com dois serviços principais e storage S3 self-hosted.
+
+**Arquitetura:**
+
+- `remotion-studio` — UI web em `https://remotion.${DOMAIN}` (editor visual das compositions), protegido por BasicAuth do Traefik (reutiliza `TRAEFIK_USER`).
+- `remotion-render` — API Express (`POST /renders`, `GET /renders/:id`) baseada no template oficial [`remotion-dev/template-render-server`](https://github.com/remotion-dev/template-render-server). **Sem rota Traefik**; acessível apenas na rede overlay `remotion_internal`.
+- `minio` — Storage S3-compatível. Console em `https://minio.${DOMAIN}`, API em `https://s3.${DOMAIN}`.
+- `minio-setup` — Init container (`minio/mc`) que cria o bucket `remotion` na primeira subida.
+
+**Pré-requisitos:**
+
+- Stack **Traefik** já rodando (opção 1).
+- **6 GB RAM livres no manager** (render = 4 GB, studio = 2 GB, MinIO ≈ 256 MB).
+- `git` instalado no manager (para clonar o template Remotion).
+- DNS configurado para 3 subdomínios:
+  - `remotion.${DOMAIN}` → IP do servidor
+  - `minio.${DOMAIN}` → IP do servidor
+  - `s3.${DOMAIN}` → IP do servidor
+
+**Deploy:**
+
+```bash
+./swarm-deploy.sh
+# 1) Escolher stack -> 4 (Remotion + MinIO)
+# 2) Escolher -> 1 (Deploy/Atualizar)
+```
+
+Na primeira execução o script:
+1. Clona `remotion-dev/template-render-server` em `./remotion/` (se não existir).
+2. Builda a imagem local `remotion-local:latest` (5-10 min).
+3. Gera `MINIO_ROOT_PASSWORD` no `.env` se estiver vazia.
+4. Faz `docker stack deploy -c docker-stack-remotion.yml remotion`.
+
+**Customizar as compositions:**
+
+```bash
+# Edite os componentes React em:
+./remotion/src/
+# Rebuild da imagem:
+docker build -t remotion-local:latest ./remotion
+# Force update do Studio e do Render:
+docker service update --force remotion_remotion-studio
+docker service update --force remotion_remotion-render
+```
+
+**Usar a API via n8n:**
+
+A rede `remotion_internal` é `attachable`. Para o n8n chamar a API de render, conecte o container ao overlay uma única vez após o deploy:
+
+```bash
+docker network connect remotion_internal $(docker ps -qf name=n8n_n8n | head -1)
+```
+
+Depois, no workflow do n8n use **HTTP Request**:
+
+```
+POST http://remotion-render:3000/renders
+Content-Type: application/json
+{
+  "compositionId": "MyComp",
+  "inputProps": { "title": "Olá do n8n" }
+}
+
+-> resposta: { "id": "<render-id>" }
+```
+
+Polling do status:
+
+```
+GET http://remotion-render:3000/renders/<render-id>
+-> quando status = "done": pegue a URL do MP4
+```
+
+> O template oficial salva o MP4 localmente por padrão. Em produção, customize `./remotion/api/` para fazer upload para MinIO usando as variáveis `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` já injetadas pelo `docker-stack-remotion.yml`. Assim a API devolve uma URL pública assinada em `https://s3.${DOMAIN}/remotion/...`.
+
+**MinIO Console:**
+
+- URL: `https://minio.${DOMAIN}`
+- Usuário: valor de `MINIO_ROOT_USER` no `.env` (default `admin`)
+- Senha: valor de `MINIO_ROOT_PASSWORD` (gerada pelo script na 1ª subida)
+
+**Pitfalls conhecidos (doc oficial + comunidade):**
+
+- **Não use Alpine** como base — Remotion tem 2 bugs documentados com Alpine. O Dockerfile do template já usa Debian bookworm.
+- **Flag `--ipv4`** obrigatória (v4.0.125+) atrás de proxy — já configurada no `command` do studio.
+- **`--max-old-space-size=4096`** no `NODE_OPTIONS` evita OOM no heap durante render pesado.
+- **Cachear `bundle()`** uma única vez no startup do servidor (já é padrão do template oficial). Não faça `bundle()` por request.
+- **Constraint `node.role == manager`**: a imagem `remotion-local:latest` só existe no manager (sem registry). Se você adicionar workers ao Swarm, migre para GHCR/Docker Hub antes.
+- **Fontes**: emojis e CJK não vêm por padrão. Adicione `RUN apt-get install -y fonts-noto-color-emoji fonts-noto-cjk` no `./remotion/Dockerfile` e rebuild.
+
+**Ver logs:**
+
+```bash
+./swarm-deploy.sh  # -> 4 -> 4 (Ver logs)
+# submenu: 1) Studio  2) Render  3) MinIO  4) MinIO Setup
+```
+
+**Limpeza completa:**
+
+```bash
+./swarm-deploy.sh  # -> 4 -> 5 (Limpeza completa)
+# Digite 'LIMPAR' para confirmar remoção de stack + volume minio_data.
+# Opcionalmente remove ./remotion e a imagem remotion-local:latest.
+```
 
 ## 🏗️ Arquitetura do Cluster
 
