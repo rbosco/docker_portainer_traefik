@@ -86,7 +86,7 @@ services:
       - PORT=3000
       # Integracao com MinIO (S3 compativel) - usadas apenas se o render-server
       # do template (ou customizado) implementar upload S3.
-      - S3_ENDPOINT=http://minio:9000
+      - S3_ENDPOINT=http://tasks.minio:9000
       - S3_PUBLIC_ENDPOINT=https://${SUBDOMAIN_S3:-s3}.${DOMAIN}
       - S3_ACCESS_KEY=${MINIO_ROOT_USER}
       - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD}
@@ -180,7 +180,7 @@ services:
       - |
         set -e
         echo "Aguardando MinIO ficar disponivel..."
-        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" >/dev/null 2>&1; do
+        until mc alias set local http://tasks.minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" >/dev/null 2>&1; do
           sleep 2
         done
         echo "MinIO disponivel. Criando bucket '$${REMOTION_S3_BUCKET}'..."
