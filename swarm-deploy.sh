@@ -270,6 +270,88 @@ ensure_docker_api_compat() {
     print_info "DOCKER_API_VERSION=$server_api (alinhado com o daemon)"
 }
 
+# Garante que /opt/remotion/ existe e aponta pro codigo fonte do Remotion.
+# Necessario para bind mounts em docker-stack-remotion.yml funcionarem.
+#
+# Estrategia:
+#   - Se /opt/remotion ja existe e tem Dockerfile -> ok
+#   - Se /opt/remotion e symlink valido -> ok
+#   - Se /opt/remotion nao existe mas ./remotion tem Dockerfile -> move + symlink
+#   - Senao -> erro (ensure_remotion_repo deve ter rodado antes)
+ensure_remotion_path() {
+    local canonical="/opt/remotion"
+    local repo_relative="$SCRIPT_DIR/remotion"
+
+    # Caso 1: /opt/remotion ja existe e e valido
+    if [ -f "$canonical/Dockerfile" ]; then
+        print_success "Codigo Remotion em $canonical (OK)"
+        # Garante que ./remotion aponta pra la (pra compatibilidade com scripts/docs)
+        if [ ! -e "$repo_relative" ]; then
+            ln -s "$canonical" "$repo_relative"
+            print_info "Criado symlink $repo_relative -> $canonical"
+        fi
+        return 0
+    fi
+
+    # Caso 2: /opt/remotion e symlink
+    if [ -L "$canonical" ]; then
+        local target
+        target=$(readlink -f "$canonical")
+        if [ -f "$target/Dockerfile" ]; then
+            print_success "Codigo Remotion via symlink $canonical -> $target (OK)"
+            return 0
+        fi
+        print_warning "$canonical e symlink quebrado (aponta pra $target)"
+        sudo rm -f "$canonical"
+    fi
+
+    # Caso 3: ./remotion tem o codigo, mas /opt/remotion nao existe
+    # -> move pra /opt e cria symlink de volta
+    if [ -f "$repo_relative/Dockerfile" ] && [ ! -L "$repo_relative" ]; then
+        print_header "Movendo codigo Remotion para $canonical"
+        print_info "Isto acontece apenas na primeira execucao."
+        print_info "Necessario porque:"
+        print_info "  - docker-stack-remotion.yml usa bind mount /opt/remotion/src:/app/src"
+        print_info "  - /opt/ e convencao Linux pra software de terceiros"
+        print_info "  - Desacopla caminho do repo (independe de onde ./ esta)"
+        echo
+
+        # Verifica permissoes (precisa sudo se executado como root? nao se ja e root)
+        if [ "$(id -u)" -ne 0 ]; then
+            print_info "Precisa de sudo pra mover pra /opt e criar symlink"
+            sudo mv "$repo_relative" "$canonical" || {
+                print_error "Falha ao mover. Verifique permissoes em /opt"
+                exit 1
+            }
+            sudo ln -s "$canonical" "$repo_relative" || {
+                print_error "Falha ao criar symlink. Reverter manualmente:"
+                print_error "  sudo mv $canonical $repo_relative"
+                exit 1
+            }
+        else
+            mv "$repo_relative" "$canonical" || {
+                print_error "Falha ao mover $repo_relative -> $canonical"
+                exit 1
+            }
+            ln -s "$canonical" "$repo_relative" || {
+                print_error "Falha ao criar symlink $repo_relative -> $canonical"
+                print_error "Reverte manualmente: mv $canonical $repo_relative"
+                exit 1
+            }
+        fi
+
+        print_success "Codigo movido para $canonical"
+        print_success "Symlink criado: $repo_relative -> $canonical"
+        print_info "A partir de agora, edite arquivos em $canonical (ou via symlink)"
+        return 0
+    fi
+
+    # Caso 4: nada existe -> erro. ensure_remotion_repo deveria ter rodado.
+    print_error "Codigo Remotion nao encontrado em $canonical nem em $repo_relative"
+    print_error "Esta funcao deveria rodar APOS ensure_remotion_repo"
+    exit 1
+}
+
 # Remotion: buildar imagem local a partir de ./remotion/Dockerfile.
 ensure_remotion_image() {
     if [ ! -f remotion/Dockerfile ]; then
@@ -315,6 +397,58 @@ ensure_remotion_image() {
     print_info "Workaround: export DOCKER_API_VERSION=\$(docker version --format '{{.Server.APIVersion}}')"
     print_info "Fix definitivo: atualize o Docker Engine na VPS"
     exit 1
+}
+
+# Conecta container do n8n na rede overlay da stack Remotion.
+# Chamado apos deploy de n8n ou de Remotion (o que vier por ultimo).
+# Idempotente: se ja estiver conectado, nao faz nada.
+# Silencioso se uma das stacks nao existir.
+ensure_n8n_remotion_network() {
+    # Verifica se ambas stacks existem
+    if ! docker stack ls --format '{{.Name}}' | grep -qx "n8n"; then
+        return 0
+    fi
+    if ! docker stack ls --format '{{.Name}}' | grep -qx "remotion"; then
+        return 0
+    fi
+
+    # Verifica se a rede existe
+    if ! docker network inspect remotion_remotion_internal >/dev/null 2>&1; then
+        print_warning "Rede 'remotion_remotion_internal' nao encontrada (stack Remotion incompleta?)"
+        return 0
+    fi
+
+    # Pega o container do n8n (pode demorar a aparecer se acabou de subir)
+    local n8n_cid
+    local retries=0
+    while [ $retries -lt 12 ]; do
+        n8n_cid=$(docker ps -q -f name=n8n_n8n | head -1)
+        if [ -n "$n8n_cid" ]; then break; fi
+        sleep 5
+        retries=$((retries + 1))
+    done
+
+    if [ -z "$n8n_cid" ]; then
+        print_warning "Container do n8n nao encontrado apos 60s"
+        print_info "Conecte manualmente depois:"
+        print_info "  docker network connect remotion_remotion_internal \$(docker ps -qf name=n8n_n8n | head -1)"
+        return 0
+    fi
+
+    # Idempotencia: se ja esta conectado, nao reconecta
+    if docker inspect "$n8n_cid" --format '{{range $net, $conf := .NetworkSettings.Networks}}{{$net}} {{end}}' | grep -q remotion_remotion_internal; then
+        print_success "n8n ja conectado a rede 'remotion_remotion_internal'"
+        return 0
+    fi
+
+    # Conecta
+    print_info "Conectando n8n a rede 'remotion_remotion_internal'..."
+    if docker network connect remotion_remotion_internal "$n8n_cid" 2>/dev/null; then
+        print_success "n8n conectado a rede da stack Remotion"
+        print_info "Use no n8n: http://tasks.remotion-render:3000 (HTTP Request node)"
+    else
+        print_warning "Falha ao conectar n8n a rede (talvez ja conectado ou conflito)"
+    fi
 }
 
 # Banner
@@ -618,6 +752,7 @@ case $DEPLOY_OPTION in
                 print_info "Mantendo credenciais do .env (defaults admin/admin123 se ainda nao existirem)."
             fi
             ensure_remotion_repo
+            ensure_remotion_path
             ensure_remotion_image
         fi
 
@@ -646,6 +781,11 @@ case $DEPLOY_OPTION in
         echo
         docker stack services "$STACK_NAME"
         echo
+
+        # Integracao com Remotion (se ambas stacks existirem)
+        if [ "$STACK_NAME" = "n8n" ] || [ "$STACK_NAME" = "remotion" ]; then
+            ensure_n8n_remotion_network
+        fi
 
         if docker stack services "$STACK_NAME" --format '{{.Replicas}}' | grep -q '^0/'; then
             print_warning "Algum servico esta com 0 replicas. Investigue com:"
