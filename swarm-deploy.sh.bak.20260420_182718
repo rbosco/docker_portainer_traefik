@@ -451,35 +451,6 @@ ensure_n8n_remotion_network() {
     fi
 }
 
-# Desconecta o container do n8n da rede da stack Remotion.
-# Par complementar de ensure_n8n_remotion_network().
-# Chamado ANTES de remover a stack Remotion pra evitar redes fantasmas
-# (se n8n permanecer conectado durante stack rm, a rede fica em estado zumbi).
-# Silencioso se n8n nao existir ou nao estiver conectado.
-disconnect_n8n_from_remotion() {
-    if ! docker stack ls --format '{{.Name}}' | grep -qx "n8n"; then
-        return 0
-    fi
-
-    local n8n_cid
-    n8n_cid=$(docker ps -q -f name=n8n_n8n | head -1)
-    if [ -z "$n8n_cid" ]; then
-        return 0
-    fi
-
-    # So tenta desconectar se realmente esta conectado
-    if ! docker inspect "$n8n_cid" --format '{{range $net, $conf := .NetworkSettings.Networks}}{{$net}} {{end}}' | grep -q remotion_remotion_internal; then
-        return 0
-    fi
-
-    print_info "Desconectando n8n da rede remotion_remotion_internal..."
-    if docker network disconnect -f remotion_remotion_internal "$n8n_cid" 2>/dev/null; then
-        print_success "n8n desconectado (rede Remotion pode ser removida sem virar fantasma)"
-    else
-        print_warning "Falha ao desconectar n8n da rede"
-    fi
-}
-
 # Banner
 clear
 echo -e "${BLUE}"
@@ -917,10 +888,6 @@ case $DEPLOY_OPTION in
 
         read -p "Tem certeza que deseja remover a stack '$STACK_NAME'? [s/N]: " CONFIRM
         if [[ "$CONFIRM" =~ ^[Ss]$ ]]; then
-            # Se for stack remotion, desconectar n8n antes pra evitar rede fantasma
-            if [ "$STACK_NAME" = "remotion" ]; then
-                disconnect_n8n_from_remotion
-            fi
             print_info "Removendo stack..."
             docker stack rm "$STACK_NAME"
             print_success "Stack removida!"
@@ -1049,10 +1016,6 @@ case $DEPLOY_OPTION in
         if [ "$CONFIRM" = "LIMPAR" ]; then
             # Remover stack
             if docker stack ls | grep -q "$STACK_NAME"; then
-                # Se for stack remotion, desconectar n8n antes pra evitar rede fantasma
-                if [ "$STACK_NAME" = "remotion" ]; then
-                    disconnect_n8n_from_remotion
-                fi
                 print_info "Removendo stack '$STACK_NAME'..."
                 docker stack rm "$STACK_NAME"
                 print_success "Stack removida"
