@@ -79,6 +79,9 @@ services:
   remotion-render:
     image: remotion-local:latest
     command: ["npm", "start"]
+    volumes:
+      - /opt/remotion/src:/app/src
+      - /opt/remotion/server:/app/server
     environment:
       - NODE_ENV=production
       - NODE_OPTIONS=--max-old-space-size=4096

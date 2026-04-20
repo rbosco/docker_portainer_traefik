@@ -16,20 +16,20 @@ const calculateDurationInFrames = (scenes: Array<{ duration_s: number }>, fps: n
 const MOCK_SCENES = [
   {
     id: 1,
-    video_url: "https://storage.googleapis.com/remotion-example/tutorial.mp4",
+    video_url: "https://s3.freedomfrompainnow.net/remotion/_assets/test_scene.mp4",
     duration_s: 4,
     subtitle_text: "Cena 1 — exemplo com legenda",
     lower_third: { title: "Introdução", subtitle: "Narrador principal" },
   },
   {
     id: 2,
-    video_url: "https://storage.googleapis.com/remotion-example/tutorial.mp4",
+    video_url: "https://s3.freedomfrompainnow.net/remotion/_assets/test_scene.mp4",
     duration_s: 4,
     subtitle_text: "Cena 2 — mesma URL pra simular cenas diferentes",
   },
   {
     id: 3,
-    video_url: "https://storage.googleapis.com/remotion-example/tutorial.mp4",
+    video_url: "https://s3.freedomfrompainnow.net/remotion/_assets/test_scene.mp4",
     duration_s: 3,
     subtitle_text: "Cena 3 — preparando CTA",
   },
